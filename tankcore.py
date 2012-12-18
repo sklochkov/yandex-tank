@@ -17,7 +17,7 @@ import tempfile
 import time
 import traceback
 import fnmatch
-
+import psutil
 
 def log_stdout_stderr(log, stdout, stderr, comment=""):
     '''
@@ -88,8 +88,9 @@ def expand_time(str_time, default_unit='s', multiplier=1):
             result += value * 60 * 60 * 24 * 7
             continue
         else: 
-            raise ValueError("String contains unsupported unit %s: %s", unit, str_time)
+            raise ValueError("String contains unsupported unit %s: %s" % (unit, str_time))
     return int(result * multiplier)
+
 
 def pid_exists(pid):
     """Check whether pid exists in the current process table."""
@@ -98,9 +99,12 @@ def pid_exists(pid):
     try:
         os.kill(pid, 0)
     except OSError, exc:
+        logging.debug("No process[%s]: %s", exc.errno, exc)
         return exc.errno == errno.EPERM
     else:
-        return True
+        p = psutil.Process(pid)
+        return p.status != psutil.STATUS_ZOMBIE
+
 
 def execute(cmd, shell=False, poll_period=1, catch_out=False):
     '''
@@ -108,6 +112,9 @@ def execute(cmd, shell=False, poll_period=1, catch_out=False):
     '''
     log = logging.getLogger(__name__)
     log.debug("Starting: %s", cmd)
+
+    stdout=""
+    stderr=""
 
     if catch_out:
         process = subprocess.Popen(cmd, shell=shell, stderr=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True)
@@ -120,13 +127,16 @@ def execute(cmd, shell=False, poll_period=1, catch_out=False):
     
     if catch_out:
         for line in process.stderr.readlines():
+            stderr+=line
             log.warn(line.strip())
         for line in process.stdout.readlines():
+            stdout+=line
             log.debug(line.strip())
     
     retcode = process.poll()
     log.debug("Process exit code: %s", retcode)
-    return retcode
+    return retcode, stdout, stderr
+
 
 def splitstring(string):
     """
@@ -352,8 +362,9 @@ class TankCore:
             self.artifacts_dir = tempfile.mkdtemp("", date_str, self.artifacts_base_dir)        
         if not os.path.isdir(self.artifacts_dir):
             os.makedirs(self.artifacts_dir)
-            os.chmod(self.artifacts_dir, 0755)
         
+        os.chmod(self.artifacts_dir, 0755)
+
         self.log.info("Artifacts dir: %s", self.artifacts_dir)
         for filename, keep in self.artifact_files.items():
             try:
@@ -370,15 +381,26 @@ class TankCore:
             self.config.config.add_section(section)
             
         try:
-            return self.config.config.get(section, option)
+            value = self.config.config.get(section, option).strip()
         except ConfigParser.NoOptionError as ex:
             if default != None:
+                default=str(default)
                 self.config.config.set(section, option, default)
                 self.config.flush()
-                return default
+                value = default.strip()
             else:
                 self.log.warn("Mandatory option %s was not found in section %s", option, section)
                 raise ex
+        
+        if len(value) > 1 and  value[0] == '`' and value[-1] == '`':
+            self.log.debug("Expanding shell option %s", value)
+            retcode, stdout, stderr = execute(value[1:-1], True, 0.1, True)
+            if retcode or stderr:
+                raise ValueError("Error expanding option %s, RC: %s" % (value, retcode))
+            value=stdout.strip()
+            
+        return value
+        
 
     def set_option(self, section, option, value):
         '''
@@ -510,6 +532,9 @@ class TankCore:
         fd, fname = tempfile.mkstemp(suffix, prefix, self.artifacts_base_dir)
         os.close(fd)
         return fname
+    
+    
+    
              
 class ConfigManager:
     '''

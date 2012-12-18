@@ -14,6 +14,7 @@ class JMeterPlugin(AbstractPlugin):
     ''' JMeter tank plugin '''
     SECTION = 'jmeter'
     
+    
     def __init__(self, core):
         AbstractPlugin.__init__(self, core)
         self.jmeter_process = None
@@ -25,9 +26,11 @@ class JMeterPlugin(AbstractPlugin):
         self.jmeter_path = None
         self.jmeter_log = None
 
+
     @staticmethod
     def get_key():
         return __file__
+
     
     def configure(self):
         self.original_jmx = self.get_option("jmx")
@@ -40,6 +43,7 @@ class JMeterPlugin(AbstractPlugin):
         self.jmeter_path = self.get_option("jmeter_path", 'jmeter')
         self.jmeter_log = self.core.mkstemp('.log', 'jmeter_')
         self.core.add_artifact_file(self.jmeter_log, True)
+
 
     def prepare_test(self):
         self.args = [self.jmeter_path, "-n", "-t", self.jmx, '-j', self.jmeter_log, '-Jjmeter.save.saveservice.default_delimiter=\\t']
@@ -75,14 +79,13 @@ class JMeterPlugin(AbstractPlugin):
     def is_test_finished(self):
         retcode = self.jmeter_process.poll()
         if retcode != None:
-            self.log.debug("JMeter RC %s", retcode)
+            self.log.info("JMeter process finished with exit core: %s", retcode)
             return retcode
         else:
             return -1
     
         
     def end_test(self, retcode):
-        # FIXME: 1 jmeter hangs
         if self.jmeter_process:
             self.log.info("Terminating jmeter process group with PID %s", self.jmeter_process.pid)
             try:
@@ -122,6 +125,7 @@ class JMeterPlugin(AbstractPlugin):
         os.write(file_handle, closing)
         os.close(file_handle)
         return new_file
+    
     
     
 class JMeterReader(AbstractReader):

@@ -12,12 +12,22 @@ import sys
 import tempfile
 import time
 import traceback
+import signal
+
+# required for non-tty python runs
+def signal_handler(signal, frame):
+    raise KeyboardInterrupt()
+    
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # TODO: 2 add system resources busy check
 class ConsoleTank:
     """
     Worker class that runs tank core accepting cmdline params
     """
+
+    IGNORE_LOCKS = "ignore_locks"
 
     MIGRATE_SECTION = 'migrate_old'
 
@@ -186,7 +196,7 @@ class ConsoleTank:
         Make all console-specific preparations before running Tank
         '''
         if self.options.ignore_lock:
-            self.log.warn("Lock files ignored. This is highly unrecommended practice!")        
+            self.log.warn("Lock files ignored. This is highly unrecommended practice!")
         
         while True:        
             try:
@@ -214,11 +224,16 @@ class ConsoleTank:
                 configs += [os.path.expanduser('~/.yandex-tank')]
             
             if not self.options.config:
-                # just for old 'lunapark' compatibility
-                self.log.debug("No config passed via cmdline, using ./load.conf")
-                conf_file = self.__adapt_old_config(os.path.realpath('load.conf'))
-                configs += [conf_file]
-                self.core.add_artifact_file(conf_file, True)
+                if os.path.exists(os.path.realpath('load.ini')):
+                    self.log.info("No config passed via cmdline, using ./load.ini")
+                    configs += [os.path.realpath('load.ini')]
+                    self.core.add_artifact_file(os.path.realpath('load.ini'), True)
+                elif os.path.exists(os.path.realpath('load.conf')):
+                    # just for old 'lunapark' compatibility
+                    self.log.warn("Using 'load.conf' is unrecommended, please use 'load.ini' instead")
+                    conf_file = self.__adapt_old_config(os.path.realpath('load.conf'))
+                    configs += [conf_file]
+                    self.core.add_artifact_file(conf_file, True)
             else:
                 for config_file in self.options.config:
                     self.__add_adapted_config(configs, config_file)
@@ -239,6 +254,10 @@ class ConsoleTank:
                     self.scheduled_start = datetime.datetime.strptime(self.options.scheduled_start, '%Y-%m-%d %H:%M:%S')
                 except ValueError:
                     self.scheduled_start = datetime.datetime.strptime(datetime.datetime.now().strftime('%Y-%m-%d ') + self.options.scheduled_start, '%Y-%m-%d %H:%M:%S')
+
+            if self.options.ignore_lock:
+                self.core.set_option(self.core.SECTION, self.IGNORE_LOCKS, "1")
+                
         except Exception, ex:
             self.log.info("Exception: %s", traceback.format_exc(ex))
             sys.stdout.write(RealConsoleMarkup.RED)
@@ -283,6 +302,10 @@ class ConsoleTank:
             retcode = self.core.plugins_post_process(retcode)
         
         except KeyboardInterrupt as ex:
+            sys.stdout.write(RealConsoleMarkup.YELLOW)
+            self.log.info("Do not press Ctrl+C again, the test will be broken otherwise")
+            sys.stdout.write(RealConsoleMarkup.RESET)
+            sys.stdout.write(RealConsoleMarkup.TOTAL_RESET)
             self.signal_count += 1
             self.log.debug("Caught KeyboardInterrupt: %s", traceback.format_exc(ex))
             try:

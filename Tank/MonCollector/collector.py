@@ -14,6 +14,7 @@ import signal
 import sys
 import tempfile
 import time
+import tankcore
 
 # FIXME: 3 synchronize times between agent and collector better
 class Config(object):
@@ -36,9 +37,9 @@ class SSHWrapper:
     '''
     separate SSH calls to be able to unit test the collector
     '''
-    def __init__(self):
+    def __init__(self, timeout):
         self.log = logging.getLogger(__name__)
-        self.ssh_opts = ['-q', '-o', 'StrictHostKeyChecking=no', '-o', 'PasswordAuthentication=no', '-o', 'NumberOfPasswordPrompts=0', '-o', 'ConnectTimeout=5']
+        self.ssh_opts = ['-q', '-o', 'StrictHostKeyChecking=no', '-o', 'PasswordAuthentication=no', '-o', 'NumberOfPasswordPrompts=0', '-o', 'ConnectTimeout=' + str(timeout)]
         self.scp_opts = []        
         self.host = None
         self.port = None
@@ -50,7 +51,7 @@ class SSHWrapper:
         self.host = host
         self.port = port
         self.scp_opts = self.ssh_opts + ['-P', self.port]
-        self.ssh_opts = self.ssh_opts + ['-p', self.port]
+        self.ssh_opts = self.ssh_opts + ['-C', '-p', self.port]
 
     def get_ssh_pipe(self, cmd):
         '''
@@ -155,11 +156,11 @@ class AgentClient(object):
         remote_dir = pipe.stdout.read().strip()
         if (remote_dir):
             self.path['AGENT_REMOTE_FOLDER'] = remote_dir
-        logging.debug("Remote dir at %s:%s", self.host, self.path['AGENT_REMOTE_FOLDER']);
+        logging.debug("Remote dir at %s:%s", self.host, self.path['AGENT_REMOTE_FOLDER'])
 
         # Copy agent
         cmd = [self.path['AGENT_LOCAL_FOLDER'] + '/agent.py', self.host + ':' + self.path['AGENT_REMOTE_FOLDER']]
-        logging.debug("Copy agent to %s: %s" ,self.host, cmd)
+        logging.debug("Copy agent to %s: %s", self.host, cmd)
 
         pipe = self.ssh.get_scp_pipe(cmd)
         pipe.wait()
@@ -219,6 +220,7 @@ class MonitoringCollector:
         self.artifact_files = []
         self.inputs, self.outputs, self.excepts = [], [], []
         self.filter_mask = defaultdict(str)
+        self.ssh_timeout = 5
 
 
     def add_listener(self, obj):
@@ -251,7 +253,7 @@ class MonitoringCollector:
             agent.port = adr['port']
             agent.interval = adr['interval']
             agent.custom = adr['custom']
-            agent.ssh = self.ssh_wrapper_class()
+            agent.ssh = self.ssh_wrapper_class(self.ssh_timeout)
             self.agents.append(agent)
         
         # Mass agents install
@@ -313,17 +315,31 @@ class MonitoringCollector:
             self.send_data = ''
             
         return len(self.outputs)            
+
     
     def stop(self):
         ''' Shutdown  agents       '''
         logging.debug("Initiating normal finish")
         for pipe in self.agent_pipes:
+            pipe.stdin.write("stop\n")
             if pipe.pid:
-                logging.debug("Killing %s with %s", pipe.pid, signal.SIGINT)
-                os.kill(pipe.pid, signal.SIGINT)
-
+                first_try = True
+                delay = 1
+                while tankcore.pid_exists(pipe.pid):
+                    if first_try:
+                        logging.debug("Killing %s with %s", pipe.pid, signal.SIGTERM)
+                        os.kill(pipe.pid, signal.SIGTERM)                        
+                        first_try = False
+                        time.sleep(0.1)
+                    else:
+                        time.sleep(delay)
+                        delay *= 2
+                        logging.warn("Killing %s with %s", pipe.pid, signal.SIGKILL)
+                        os.kill(pipe.pid, signal.SIGKILL)
+                        
         for agent in self.agents:
             self.artifact_files.append(agent.uninstall())
+
         
     def getconfig(self, filename, target_hint):
         ''' Prepare config data'''
@@ -339,8 +355,8 @@ class MonitoringCollector:
     
         try:
             tree = etree.parse(filename)
-        except IOError, e:
-            logging.error("Error loading config: %s", e)
+        except IOError, exc:
+            logging.error("Error loading config: %s", exc)
             raise RuntimeError ("Can't read monitoring config %s" % filename)
     
         hosts = tree.xpath('/Monitoring/Host')
@@ -524,11 +540,58 @@ class MonitoringDataListener:
     ''' Parent class for data listeners '''
     def monitoring_data(self, data_string):
         ''' Notification about new monitoring data lines '''
-        raise RuntimeError("Abstract method needs to be overridden")
+        raise NotImplementedError()
 
 
 class StdOutPrintMon(MonitoringDataListener):
     ''' Simple listener, writing data to stdout '''
     
     def monitoring_data(self, data_string):
-            sys.stdout.write(data_string)
+        sys.stdout.write(data_string)
+
+
+class MonitoringDataDecoder:
+    '''
+    The class that serves converting monitoring data lines to dict
+    '''
+    NA = 'n/a'
+
+    def __init__(self):
+        self.metrics = {}
+    
+    def decode_line(self, line):
+        ''' convert mon line to dict '''
+        is_initial = False
+        data_dict = {}
+        data = line.strip().split(';')
+        if data[0] == 'start':
+            data.pop(0) # remove 'start'
+            host = data.pop(0)
+            if not data:
+                logging.warn("Wrong mon data line: %s", line)
+            else:
+                data.pop(0) # remove timestamp
+                self.metrics[host] = []
+                for metric in data:
+                    if metric.startswith("Custom:"):
+                        metric = base64.standard_b64decode(metric.split(':')[1])
+                    self.metrics[host].append(metric)
+                    data_dict[metric] = self.NA
+                    is_initial = True
+        else:
+            host = data.pop(0)
+            data.pop(0) # remove timestamp
+            
+            if host not in self.metrics.keys():
+                raise ValueError("Host %s not in started metrics: %s" % (host, self.metrics))
+            
+            if len(self.metrics[host]) != len(data):
+                raise ValueError("Metrics len and data len differs: %s vs %s" % (len(self.metrics[host]), len(data)))
+            
+            for metric in self.metrics[host]:
+                data_dict[metric] = data.pop(0)
+                    
+        self.log.debug("Decoded data %s: %s", host, data_dict)
+        return host, data_dict, is_initial
+
+            

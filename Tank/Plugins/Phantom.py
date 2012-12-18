@@ -94,9 +94,9 @@ class PhantomPlugin(AbstractPlugin, AggregateResultListener):
                 self.config = self.phantom.compose_config()
             args = [self.phantom_path, 'check', self.config]
             
-            retcode = tankcore.execute(args, catch_out=True)
+            retcode = tankcore.execute(args, catch_out=True)[0]
             if retcode:
-                raise RuntimeError("Subprocess returned %s",)    
+                raise RuntimeError("Subprocess returned %s" % retcode)    
 
         try:
             console = self.core.get_plugin_of_type(ConsoleOnlinePlugin)
@@ -127,7 +127,7 @@ class PhantomPlugin(AbstractPlugin, AggregateResultListener):
             self.process = subprocess.Popen(args, stderr=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True)
         else:
             if not os.path.exists(self.phout_import_mode):
-                raise RuntimeError("Phout file not exists for import: %s", self.phout_import_mode)
+                raise RuntimeError("Phout file not exists for import: %s" % self.phout_import_mode)
             self.log.warn("Will import phout file instead of running phantom: %s", self.phout_import_mode)
     
 
@@ -168,6 +168,7 @@ class PhantomPlugin(AbstractPlugin, AggregateResultListener):
 
     def aggregate_second(self, second_aggregate_data):
         self.processed_ammo_count += second_aggregate_data.overall.RPS
+        self.log.debug("Processed ammo count: %s/", self.processed_ammo_count);
 
             
 
@@ -321,6 +322,7 @@ class PhantomReader(AbstractReader):
         self.partial_buffer = ''
         self.pending_second_data_queue = []
         self.last_sample_time = 0
+        self.read_lines_count = 0
   
     def check_open_files(self):
         if not self.phout and self.phantom.phantom and os.path.exists(self.phantom.phantom.phout_file):
@@ -380,7 +382,7 @@ class PhantomReader(AbstractReader):
             line = self.partial_buffer + line
             self.partial_buffer = ''
             if line[-1] != "\n":
-                self.log.warn("Not complete line, buffering it: %s", line)
+                self.log.debug("Not complete line, buffering it: %s", line)
                 self.partial_buffer = line
                 continue
             line = line.strip()
@@ -389,6 +391,7 @@ class PhantomReader(AbstractReader):
                 continue
             #1346949510.514        74420    66    78    65409    8867    74201    18    15662    0    200
             #self.log.debug("Phout line: %s", line)
+            self.read_lines_count += 1
             data = line.split("\t")
             if len(data) != 12:
                 self.log.warning("Wrong phout line, skipped: %s", line)
@@ -418,13 +421,17 @@ class PhantomReader(AbstractReader):
             #        accuracy
             data_item += [(float(data[7]) + 1) / (int(data[2]) + 1)]
             self.data_buffer[cur_time].append(data_item)
-                    
+
+        self.log.debug("Read lines: %s", self.read_lines_count)                    
+        self.log.debug("Seconds queue: %s", self.data_queue)
+        self.log.debug("Seconds buffer: %s", self.data_buffer.keys())
         if len(self.data_queue) > 3:
             return self.pop_second()
         
         if force and self.data_queue:
             return self.pop_second()
         else:
+            self.log.debug("No queue data!")
             return None 
 
 
@@ -432,21 +439,28 @@ class PhantomReader(AbstractReader):
         parsed_sec = AbstractReader.pop_second(self)
         if parsed_sec:
             self.pending_second_data_queue.append(parsed_sec)
+        else:
+            self.log.debug("No new seconds present")   
             
         if not self.pending_second_data_queue:
+            self.log.debug("pending_second_data_queue empty")
             return None
+        else:
+            self.log.debug("pending_second_data_queue: %s", self.pending_second_data_queue)
+
 
         next_time = int(time.mktime(self.pending_second_data_queue[0].time.timetuple()))
             
         if self.last_sample_time and (next_time - self.last_sample_time) > 1:
             self.last_sample_time += 1
-            self.log.debug("Adding phantom zero sample: %s", self.last_sample_time)
+            self.log.warning("Adding phantom zero sample: %s", self.last_sample_time)
             res = self.get_zero_sample(datetime.datetime.fromtimestamp(self.last_sample_time))
         else:
             res = self.pending_second_data_queue.pop(0)
         
         self.last_sample_time = int(time.mktime(res.time.timetuple()))
         res.overall.planned_requests = self.__get_expected_rps()
+        self.log.debug("Pop result: %s", res)
         return res
     
 
@@ -538,7 +552,7 @@ class UsedInstancesCriteria(AbstractCriteria):
         return ("Instances >%s for %s/%ss" % items, float(self.seconds_count) / self.seconds_limit)
 
 class PhantomConfig:
-
+    ''' config file generator '''
     OPTION_INSTANCES_LIMIT = 'instances'
     OPTION_PHOUT = "phout_file"
     OPTION_STPD = 'stpd_file'
@@ -568,19 +582,22 @@ class PhantomConfig:
         self.phantom_http_field_num = None
         self.phantom_http_field = None
         self.phantom_http_entity = None
+        self.resolved_ip = None
 
 
     def get_option(self, option_ammofile, param2=None):
+        ''' get option wrapper '''
         return self.owner.get_option(option_ammofile, param2)
     
     
-    def __check_address(self):
-        '''
-        Analyse target address setting, resolve it to IP
-        '''
+    def __resolve_address(self):
+        '''        Analyse target address setting, resolve it to IP        '''
+        if not self.address:
+            raise RuntimeError("Target address not specified")
         try:
             ipaddr.IPv6Address(self.address)
             self.ipv6 = True
+            self.resolved_ip = self.address
         except AddressValueError:
             self.log.debug("Not ipv6 address: %s", self.address)
             self.ipv6 = False
@@ -590,25 +607,22 @@ class PhantomConfig:
                 self.port = address_port[1]
             try:
                 ipaddr.IPv4Address(self.address)
+                self.resolved_ip = self.address
             except AddressValueError:
                 self.log.debug("Not ipv4 address: %s", self.address)
                 ip_addr = socket.gethostbyname(self.address)
                 reverse_name = socket.gethostbyaddr(ip_addr)[0]
                 self.log.debug("Address %s ip_addr: %s, reverse-resolve: %s", self.address, ip_addr, reverse_name)
                 if reverse_name.startswith(self.address):
-                    self.address = ip_addr
+                    self.resolved_ip = ip_addr
                 else:
                     raise ValueError("Address %s reverse-resolved to %s, but must match" % (self.address, reverse_name))
 
 
     def read_config(self):
-        '''
-        Read phantom tool specific options
-        '''
+        '''        Read phantom tool specific options        '''
         self.phantom_modules_path = self.get_option("phantom_modules_path", "/usr/lib/phantom")
         self.ssl = int(self.get_option("ssl", '0'))
-        self.address = self.get_option('address', '127.0.0.1')
-        self.port = self.get_option('port', '80')
         self.tank_type = self.get_option("tank_type", 'http')
         self.answ_log_level = self.get_option("writelog", "none")
         if self.answ_log_level == '0':
@@ -631,15 +645,16 @@ class PhantomConfig:
         self.phantom_http_field = self.get_option("phantom_http_field", "")
         self.phantom_http_entity = self.get_option("phantom_http_entity", "")
 
-        self.__check_address()            
+        self.address = self.get_option('address', 'localhost')
+        self.port = self.get_option('port', '80')
+        self.__resolve_address()            
+
         self.owner.core.add_artifact_file(self.answ_log)        
         self.owner.core.add_artifact_file(self.stat_log)
         self.owner.core.add_artifact_file(self.phantom_log)
 
     def compose_config(self):
-        '''
-        Generate phantom tool run config
-        '''
+        '''        Generate phantom tool run config        '''
         if not self.stpd:
             raise RuntimeError("Cannot proceed with no source file")
         
@@ -657,7 +672,7 @@ class PhantomConfig:
             kwargs['bind'] = 'bind={ ' + self.gatling + ' }'
         else: 
             kwargs['bind'] = '' 
-        kwargs['ip'] = self.address
+        kwargs['ip'] = self.resolved_ip
         kwargs['port'] = self.port
         kwargs['timeout'] = self.timeout
         kwargs['instances'] = self.instances
@@ -713,7 +728,7 @@ class StepperWrapper:
         # stepper
         self.rps_schedule = []
         self.use_caching = True
-        self.http_ver = None
+        self.http_ver = '1.0'
         self.steps = []
         self.ammo_file = None
         self.instances_schedule = ''
@@ -728,11 +743,12 @@ class StepperWrapper:
         
 
     def get_option(self, option_ammofile, param2=None):
+        ''' get_option wrapper'''
         return self.owner.get_option(option_ammofile, param2)
     
     
     def read_config(self):
-        # stepper part
+        ''' stepper part of reading options '''
         self.ammo_file = self.get_option(self.OPTION_AMMOFILE, '')
         if self.ammo_file:
             self.ammo_file = os.path.expanduser(self.ammo_file)
@@ -752,7 +768,7 @@ class StepperWrapper:
         self.headers = self.get_option("headers", '').strip().split("\n")
         while '' in self.headers: 
             self.headers.remove('')
-        self.http_ver = self.get_option("header_http", '1.1')
+        self.http_ver = self.get_option("header_http", self.http_ver)
         self.autocases = self.get_option("autocases", '0')
         self.use_caching = int(self.get_option("use_caching", '1'))
         self.cache_dir = os.path.expanduser(self.get_option("cache_dir", self.owner.core.artifacts_base_dir))
@@ -791,11 +807,11 @@ class StepperWrapper:
             hasher = hashlib.md5()
             hashed_str = self.instances_schedule + sep + str(self.loop_limit)
             hashed_str += sep + str(self.ammo_limit) + sep + ';'.join(self.rps_schedule) + sep + str(self.autocases)
-            hashed_str += sep + ";".join(self.uris) + sep + ";".join(self.headers)
+            hashed_str += sep + ";".join(self.uris) + sep + ";".join(self.headers) + sep + self.http_ver
             
             if self.ammo_file:
                 if not os.path.exists(self.ammo_file):
-                    raise RuntimeError("Ammo file not found: %s", self.ammo_file)
+                    raise RuntimeError("Ammo file not found: %s" % self.ammo_file)
             
                 hashed_str += sep + os.path.realpath(self.ammo_file)
                 stat = os.stat(self.ammo_file)
@@ -843,9 +859,11 @@ class StepperWrapper:
         external_stepper_conf.read(cached_config)
         #stepper.cases = external_stepper_conf.get(AggregatorPlugin.SECTION, AggregatorPlugin.OPTION_CASES)
         steps = external_stepper_conf.get(PhantomPlugin.SECTION, self.OPTION_STEPS).strip().split(' ')
-        if steps:
+
+        if len(steps) % 2 == 0:
             stepper.steps = [int(x) for x in steps]
         else:
+            self.log.warning("Steps list must be even: %s", steps)
             stepper.steps = []
         stepper.loadscheme = external_stepper_conf.get(PhantomPlugin.SECTION, self.OPTION_LOADSCHEME)
         stepper.loop_count = external_stepper_conf.get(PhantomPlugin.SECTION, self.OPTION_LOOP_COUNT)

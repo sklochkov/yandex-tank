@@ -1,7 +1,5 @@
 #! /usr/bin/python
-'''
-The agent bundle, contains all metric classes and agent running code
-'''
+''' The agent bundle, contains all metric classes and agent running code '''
 from optparse import OptionParser
 from subprocess import Popen, PIPE
 import ConfigParser
@@ -13,9 +11,11 @@ import re
 import socket
 import sys
 import time
+import fcntl
+from threading import Thread
 
 class AbstractMetric:
-    ''' Parent class for all metrics'''
+    ''' Parent class for all metrics '''
     def columns(self):
         ''' methods should return list of columns provided by metric class '''
         raise NotImplementedError()
@@ -122,8 +122,7 @@ class CpuStat(AbstractMetric):
 #                logger.debug("Result: %s" % result)
                     
         # Numproc, numthreads 
-        # FIXME: 1 remove this expensive operations!!!
-        command = ['ps axf | wc -l', 'ps -eLf | wc -l']
+        command = ['ps ax | wc -l', "cat /proc/loadavg | cut -d' ' -f 4 | cut -d'/' -f2"]
         for cmd in command:
             try:
                 output = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -146,11 +145,11 @@ def is_number(s):
         return False
 
 class Custom(AbstractMetric):
-
-    def __init__(self, **kwargs):
-        for key, value in kwargs.iteritems():
-            setattr(self, key, value)
-            self.diff_values = {}
+    ''' custom metrics: call and tail '''
+    def __init__(self, call, tail):
+        self.call = call
+        self.tail = tail
+        self.diff_values = {}
 
     def columns(self,):
         cols = []
@@ -165,7 +164,7 @@ class Custom(AbstractMetric):
         for el in self.tail:
             cmd = base64.b64decode(el.split(':')[1])
             output = Popen(['tail', '-n', '1', cmd], stdout=PIPE).communicate()[0]
-            res.append(self.diff_value(output.strip()))
+            res.append(self.diff_value(el, output.strip()))
         for el in self.call:
             cmd = base64.b64decode(el.split(':')[1])
             output = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE).stdout.read()
@@ -391,7 +390,7 @@ class NetTxRx(AbstractMetric):
         If we have network bonding or need to collect multiple iface
         statistic beter to change that behavior.
         '''
-        data = commands.getoutput("/sbin/ifconfig -s | awk '{rx+=$4; tx+=$8} END {print rx, tx}'")
+        data = commands.getoutput("/sbin/ifconfig -s | awk '{rx+=$8; tx+=$4} END {print rx, tx}'")
         logging.debug("TXRX output: %s", data)
         (rx, tx) = data.split(" ")
         rx = int(rx)
@@ -406,7 +405,7 @@ class NetTxRx(AbstractMetric):
         self.prevRX = rx
         self.prevTX = tx
         
-        return [tRX, tTX]
+        return [str(tRX), str(tTX)]
 
 
 
@@ -455,6 +454,33 @@ class Net(AbstractMetric):
         return result
 
 
+# ===========================
+
+class PidStat(AbstractMetric):
+    def __init__(self):
+        self.fields = ['pid', 'comm', 'state', 'ppid', 'pgrp', 'session', 'tty_nr', 'tpgid', 'flags',
+                     'minflt', 'cminflt', 'majflt', 'cmajflt', 'utime', 'stime', 'cutime', 'cstime',
+                     'priority', 'nice', 'num_threads', 'itrealvalue', 'starttime', 'vsize', 'rss',
+                     'rsslim', 'startcode', 'endcode', 'startstack', 'kstkesp', 'kstkeip', 'signal',
+                     'blocked', 'segignore', 'sigcatch', 'wchan', 'nswap', 'cnswap', 'exit_signal',
+                     'processor', 'rt_priority', 'policy', 'delayacct_blkio_ticks', 'guest_time',
+                     'cguest_time']
+        self.total_ticks = -1
+        self.prev_vals = []
+        self.pid = 0
+        
+        
+    def set_options(self, options):
+        # direct pid and pidfile
+        self.pid = 0
+        
+    
+    def columns(self,):
+        return self.fields
+
+    def check(self,):
+        loadavg_str = open('/proc/loadavg', 'r').readline().strip()
+        return map(str, loadavg_str.split()[:3])
 
 # ===========================
 
@@ -466,10 +492,7 @@ def write(mesg):
 def setup_logging():
     ''' Logging params '''
     fname = os.path.dirname(__file__) + "_agent.log"
-    if os.getenv("DEBUG"):
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
+    level = logging.DEBUG
         
     fmt = "%(asctime)s - %(filename)s - %(name)s - %(levelname)s - %(message)s"
     logging.basicConfig(filename=fname, level=level, format=fmt)
@@ -497,54 +520,101 @@ def fixed_sleep(slp_interval,):
         time.sleep(slp_interval)
 
 
-# TODO: 3 why this is required???
-def check_cpu_mem(process_dict):
-    '''
-    Read 'ps' tool output and
-    collect POSIX process %CPU,%MEM,VSZ,RSS values
-    '''
-    result = []
-    for name in process_dict:
-        result.extend(commands.getoutput('ps aux | grep ' + str(process_dict[name]['pid']) + ' | grep -v grep | awk \'{print $3";"$4";"$5";"$6}\'').split(';'))
-    return result
-
-
-proc_column = lambda name: [name + '_cpu_per', name + '_mem_per',
-                                                name + '_mem_vsz',
-                                                name + '_mem_rss', ]
 unixtime = lambda: str(int(time.time()))
 
+class AgentWorker(Thread):
+    dlmtr = ';'
+    
+    def __init__(self):
+        Thread.__init__(self)
+        self.daemon = True # Thread auto-shutdown
+        self.finished = False
+        # metrics we know about
+        self.known_metrics = {
+                'cpu-la': CpuLa(),
+                'cpu-stat': CpuStat(),
+                'mem':  Mem(),
+                'io':  Io(),
+                'net-retrans': NetRetrans(),
+                'net-tx-rx': NetTxRx(),
+                'net-tcp': NetTcp(),
+                'disk': Disk(),
+                'net': Net(),
+                'pid': PidStat(),
+                }
+
+
+    def run(self):
+        logging.info("Start polling thread")
+        global t_after
+        t_after = None
+        header = []
+    
+        sync_time = str(self.c_start + (int(time.time()) - self.c_local_start))
+        header.extend(['start', self.c_host, sync_time])  # start compile init header
+    
+        # add metrics from config file to header
+        for metric_name in self.metrics_collected:
+            if metric_name:
+                header.extend(self.known_metrics[metric_name].columns())
+    
+        # add custom metrics from config file to header
+        custom = Custom(self.calls, self.tails)
+        header.extend(custom.columns())
+    
+        sys.stdout.write(self.dlmtr.join(header) + '\n')
+        sys.stdout.flush()
+    
+        logging.debug(self.dlmtr.join(header))
+        
+        # check loop
+        while not self.finished:
+            logging.debug('Start check')
+            line = []
+            sync_time = str(self.c_start + (int(time.time()) - self.c_local_start))
+            line.extend([self.c_host, sync_time])
+    
+            # known metrics
+            for metric_name in self.metrics_collected:
+                try:
+                    data = self.known_metrics[metric_name].check()
+                    if len(data) != len(self.known_metrics[metric_name].columns()):
+                        raise RuntimeError("Data len not matched columns count: %s" % data)
+                except Exception, e:
+                    logging.error('Can\'t fetch %s: %s', metric_name, e)
+                    data = [''] * len(self.known_metrics[metric_name].columns())
+                line.extend(data)
+            
+            logging.debug("line: %s" % line)
+            # custom commands
+            line.extend(custom.check())
+            
+            # print result line
+            try:
+                row = self.dlmtr.join(line)
+                logging.debug("str: %s" % row)
+                sys.stdout.write(row + '\n')
+                sys.stdout.flush()
+            except Exception, e:
+                logging.error('Failed to convert line %s: %s', line, e)
+                
+            fixed_sleep(self.c_interval)
+    
+
 if __name__ == '__main__':
+    pass
+
+#def tmp():
     # default params
     def_cfg_path = 'agent.cfg'
     c_interval = 1
     c_host = socket.getfqdn()
-    custom_cfg = {'tail': [], 'call': []}
-    c_tail = ''
-    c_loglevel = ''
     c_local_start = int(time.time())
-    c_start = c_local_start
-    process = {}
-    header = []
-    dlmtr = ';'
-    t_after = None
     
-    #logger.debug("[debug] [agent] Start agent at host: %s\n" % c_host)
+    setup_logging()    
+    logging.info("Start agent at host: %s\n" % c_host)
     
-    # metrics we know about
-    known_metrics = {
-            'cpu-la': CpuLa(),
-            'cpu-stat': CpuStat(),
-            'mem':  Mem(),
-            'io':  Io(),
-            'net-retrans': NetRetrans(),
-            'net-tx-rx': NetTxRx(),
-            'net-tcp': NetTcp(),
-            'disk': Disk(),
-            'net': Net(),
-            }
     
-#    logger.debug('[debug] [agent] Start main loop')
     # parse options
     parser = OptionParser()
     parser.add_option('-c', '--config', dest='cfg_file', type='str',
@@ -560,20 +630,12 @@ if __name__ == '__main__':
 
     # parse cfg file
     config = ConfigParser.ConfigParser()
-    try:
-        config.readfp(open(options.cfg_file))
-    except IOError, msg:
-        print >> sys.stderr, 'Can\'t read config file: ' + options.cfg_file
-        sys.exit(1)
+    config.readfp(open(options.cfg_file))
 
     # metric section
-    c_metrics = []
-    try:
-        if config.has_option('metric', 'names'):
-            c_metrics = config.get('metric', 'names').split(',')
-    except ConfigParser.NoOptionError, msg:
-        print >> sys.stderr, 'Can\'t parce config file, reason:\n', msg
-        sys.exit(1)
+    metrics_collected = []
+    if config.has_option('metric', 'names'):
+        metrics_collected = config.get('metric', 'names').split(',')
 
     # main section
     if config.has_section('main'):
@@ -581,127 +643,37 @@ if __name__ == '__main__':
             c_interval = config.getfloat('main', 'interval')
         if config.has_option('main', 'host'):
             c_host = config.get('main', 'host')
-        if config.has_option('main', 'loglevel'):
-            c_loglevel = config.get('main', 'loglevel')
         if config.has_option('main', 'start'):
             c_start = config.getint('main', 'start')
 
-    logging.info('Agent params: %s, %s, %s' % (c_interval, c_host, c_loglevel))
+    logging.info('Agent params: %s, %s' % (c_interval, c_host))
 
     # custom section
+    calls = []
+    tails = []
     if config.has_section('custom'):
         if config.has_option('custom', 'tail'):
-            custom_cfg['tail'] += config.get('custom', 'tail').split(',')
+            tails += config.get('custom', 'tail').split(',')
         if config.has_option('custom', 'call'):
-            custom_cfg['call'] += config.get('custom', 'call').split(',')
+            calls += config.get('custom', 'call').split(',')
 
-
-    # parce cfg file - process section
-    try:
-        c_process = config.get('process', 'names').split(',')
-        for proc_name in c_process:
-            try:
-                process[proc_name] = {'pid_file': config.get('process',
-                                                    proc_name + '_pid_file')}
-            except ConfigParser.NoOptionError:
-                try:
-                    process[proc_name] = {'pid': config.getint('process',
-                                                        proc_name + '_pid')}
-                except Exception, e:
-                    print >> sys.stderr, \
-                            'Can\'t parce config file *process* section:\n', e
-                    sys.exit(1)
-                pass
-            pass
-    except ConfigParser.NoOptionError, e:
-        print '*process* section have to contain names and pids fields!\n', e
-        sys.exit(1)
-    except ConfigParser.NoSectionError:  # All fine, we can work without proc
-        pass
-    pass
-
-    sync_time = str(c_start + (int(time.time()) - c_local_start))
-#    header.extend(['start', c_host, unixtime()])  # start compile init header
-    header.extend(['start', c_host, sync_time])  # start compile init header
-
-    # check process, if it exist add columns to header
-    for name in process:
-        try:
-            tmpPID = open(process[name]['pid_file'], 'r').read()
-            # check that pid_file exist but is empty
-            if not len(tmpPID) == 0:
-                process[name]['pid'] = tmpPID.rstrip()
-                if not os.path.exists('/proc/' + str(process[name]['pid'])):
-                    print >> sys.stderr, 'Process with PID: ', \
-                    process[name]['pid'], \
-                    'doesn\'t exist. Associated with app:', name
-                    sys.exit(1)
-                else:
-                    header.extend(proc_column(name))
-            else:
-                print >> sys.stderr, 'PID File is empty, path: ',
-                process[name]['pid_file']
-                sys.exit(1)
-        # no 'pid_file' key in dict,
-        # that mean that we shude use 'pid' property from conf file
-        except KeyError:
-            if not os.path.exists('/proc/' + str(process[name]['pid'])):
-                print >> sys.stderr, 'Process with PID: ', \
-                process[name]['pid'], \
-                'doesn\'t exist, associated with app:', \
-                name
-                sys.exit(1)
-            else:
-                header.extend(proc_column(name))
-        # can't read pid_file
-        except IOError, e:
-            print >> sys.stderr, 'Can\'t read PID file: ',
-            process[name]['pid_file'], '\n', e
-            sys.exit(1)
-        pass
-
-    # add metrics from config file to header
-    for metric_name in c_metrics:
-        if metric_name:
-            header.extend(known_metrics[metric_name].columns())
-
-    # add custom metrics from config file to header
-#    print custom_cfg
-    custom = Custom(**custom_cfg)
-    header.extend(custom.columns())
-
-    sys.stdout.write(dlmtr.join(header) + '\n')
-    sys.stdout.flush()
-
-    logging.debug(dlmtr.join(header))
-
-    # check loop
-    while True:
-        logging.debug('Check')
-        line = []
-        sync_time = str(c_start + (int(time.time()) - c_local_start))
-        line.extend([c_host, sync_time])
-        for name in process:
-            line.extend(check_cpu_mem(process))
-
-        # known metrics
-        for metric_name in c_metrics:
-            try:
-                data = known_metrics[metric_name].check()
-            except Exception, e:
-                logging.error('Can\'t fetch %s: %s', metric_name, e)
-                data = ''
-            line.extend(data)
-        
-        logging.debug("line: %s" % line)
-        # custom commands
-        line.extend(custom.check())
-        
-        # print result line
-        row = dlmtr.join(line)
-        logging.debug("str: %s" % row)
-        sys.stdout.write(dlmtr.join(line) + '\n')
-        sys.stdout.flush()
-
-        fixed_sleep(c_interval)
-
+    worker = AgentWorker()
+    
+    # populate
+    worker.c_start = c_start
+    worker.c_local_start = c_local_start
+    worker.c_host = c_host
+    worker.metrics_collected = metrics_collected
+    worker.calls = calls
+    worker.tails = tails
+    worker.c_interval = c_interval
+    
+    worker.start()
+    
+    logging.debug("Ckeck for stdin shutdown command")
+    cmd = sys.stdin.read()
+    if cmd:
+        logging.info("Stdin cmd received: %s", cmd)
+        worker.finished = True
+            
+    

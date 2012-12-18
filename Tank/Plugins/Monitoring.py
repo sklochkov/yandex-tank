@@ -1,18 +1,17 @@
-'''
-Module to provide target monitoring
-'''
+'''Module to provide target monitoring'''
 
 from Tank.MonCollector.collector import MonitoringCollector, \
-    MonitoringDataListener
+    MonitoringDataListener, MonitoringDataDecoder, Config
 from Tank.Plugins.ConsoleOnline import ConsoleOnlinePlugin, AbstractInfoWidget
 from Tank.Plugins.Phantom import PhantomPlugin
 from tankcore import AbstractPlugin
-import base64
 import os
 import time
 import traceback
 from Tank.Plugins.Autostop import AutostopPlugin, AbstractCriteria
 import tankcore
+import fnmatch
+from lxml import etree
 
 class MonitoringPlugin(AbstractPlugin):
     '''
@@ -37,12 +36,21 @@ class MonitoringPlugin(AbstractPlugin):
         return __file__
     
     def configure(self):
-        self.config = self.get_option("config", 'auto')
+        self.config = self.get_option("config", 'auto').strip()
         self.default_target = self.get_option("default_target", 'localhost')
+        self.monitoring.ssh_timeout = tankcore.expand_to_seconds(self.get_option('ssh_timeout', "5s"))
 
         if self.config == 'none' or self.config == 'auto':
             self.die_on_fail = False
         else:
+            if self.config[0] == '<':                    
+                xmlfile = self.core.mkstemp(".xml", "monitoring_")
+                self.core.add_artifact_file(xmlfile)
+                xml = open(xmlfile, 'w')
+                xml.write(self.config)
+                xml.close()
+                self.config = xmlfile
+            
             if not os.path.exists(self.config):
                 raise OSError("Monitoring config file not found: %s" % self.config)         
                     
@@ -154,42 +162,6 @@ class SaveMonToFile(MonitoringDataListener):
             self.store.close()
 
 
-class MonitoringDataDecoder:
-    '''
-    The class that serves converting monitoring data lines to dict
-    '''
-    NA = 'n/a'
-
-    def __init__(self):
-        self.metrics = {}
-    
-    def decode_line(self, line):
-        ''' convert mon line to dict '''
-        is_initial = False
-        data_dict = {}
-        data = line.strip().split(';')
-        if data[0] == 'start':
-            data.pop(0) # remove 'start'
-            host = data.pop(0)
-            if not data:
-                raise ValueError("Wrong mon data line: %s", line)
-            
-            data.pop(0) # remove timestamp
-            self.metrics[host] = []
-            for metric in data:
-                if metric.startswith("Custom:"):
-                    metric = base64.standard_b64decode(metric.split(':')[1])
-                self.metrics[host].append(metric)
-                data_dict[metric] = self.NA
-                is_initial = True
-        else:
-            host = data.pop(0)
-            data.pop(0) # remove timestamp
-            for metric in self.metrics[host]:
-                data_dict[metric] = data.pop(0)
-        return host, data_dict, is_initial
-
-            
 class MonitoringWidget(AbstractInfoWidget, MonitoringDataListener, MonitoringDataDecoder):
     '''
     Screen widget
@@ -257,6 +229,7 @@ class MonitoringWidget(AbstractInfoWidget, MonitoringDataListener, MonitoringDat
                     res += "      %s%s: %s\n" % (' ' * (self.max_metric_len - len(metric)), metric.replace('_', ' '), value)
                     
             return res.strip()
+
             
 
 class AbstractMetricCriteria(AbstractCriteria, MonitoringDataListener, MonitoringDataDecoder):
@@ -267,7 +240,8 @@ class AbstractMetricCriteria(AbstractCriteria, MonitoringDataListener, Monitorin
         
         try:
             self.mon = autostop.core.get_plugin_of_type(MonitoringPlugin)
-            self.mon.monitoring.add_listener(self)
+            if self.mon.monitoring:
+                self.mon.monitoring.add_listener(self)
         except KeyError:
             self.log.warning("No monitoring module, mon autostop disabled")
         self.triggered = False
@@ -289,10 +263,10 @@ class AbstractMetricCriteria(AbstractCriteria, MonitoringDataListener, Monitorin
                 continue
             
             host, data, initial = self.decode_line(line)
-            if initial or host != self.host:
+            if initial or not fnmatch.fnmatch(host, self.host):
                 return
             
-            if not data[self.metric] or data[self.metric] == self.NA:
+            if self.metric not in data.keys() or not data[self.metric] or data[self.metric] == self.NA:
                 data[self.metric] = 0
                 
             self.log.debug("Compare %s %s/%s=%s to %s", self.get_type_string(), host, self.metric, data[self.metric], self.value_limit)
@@ -317,9 +291,11 @@ class AbstractMetricCriteria(AbstractCriteria, MonitoringDataListener, Monitorin
         self.last_second = aggregate_second
         return self.triggered
     
-    def comparison_fn(self, x, y):
+    def comparison_fn(self, arg1, arg2):
         ''' comparison function '''
         raise NotImplementedError()
+
+
 
 class MetricHigherCriteria(AbstractMetricCriteria):
     ''' trigger if metric is higher than limit '''
@@ -341,8 +317,10 @@ class MetricHigherCriteria(AbstractMetricCriteria):
         items = (self.host, self.metric, self.value_limit, self.seconds_count, self.seconds_limit)
         return ("%s/%s > %s for %s/%ss" % items, float(self.seconds_count) / self.seconds_limit)
 
-    def comparison_fn(self, x, y):
-        return x > y
+    def comparison_fn(self, arg1, arg2):
+        return arg1 > arg2
+
+
 
 class MetricLowerCriteria(AbstractMetricCriteria):
     ''' trigger if metric is lower than limit '''
@@ -364,7 +342,7 @@ class MetricLowerCriteria(AbstractMetricCriteria):
         items = (self.host, self.metric, self.value_limit, self.seconds_count, self.seconds_limit)
         return ("%s/%s < %s for %s/%ss" % items, float(self.seconds_count) / self.seconds_limit)
 
-    def comparison_fn(self, x, y):
-        return x < y
+    def comparison_fn(self, arg1, arg2):
+        return arg1 < arg2
 
 
