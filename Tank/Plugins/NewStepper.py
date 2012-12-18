@@ -2,14 +2,14 @@
 Tools for preparing phantom input data file
 '''
 
-from collections import defaultdict
-from progressbar import ProgressBar, Percentage, Bar, ETA
-import logging
-import operator
-import os
-import re
-import tempfile
-import tankcore
+#from collections import defaultdict
+#from progressbar import ProgressBar, Percentage, Bar, ETA
+#import logging
+#import operator
+#import os
+#import re
+#import tempfile
+#import tankcore
 
 
 class HttpAmmo(object):
@@ -21,11 +21,22 @@ class HttpAmmo(object):
         self.body = []
 
 
+class SimpleAmmoFactory(object):
+    '''Generates ammo based on given sample'''
+    def __init__(self, ammo_sample):
+        self.ammo_sample = ammo_sample
+
+    def get_ammo(self):
+        self.ammo_sample
+
+
 class Generator(object):
-    '''The Generator. Gets AmmoFactory and LoadPlan and generates ammo.'''
-    def __init__(self, load_plan, ammo_factory):
-        self.load_plan = load_plan
-        self.ammo_factory = ammo_factory
+    '''
+    The Generator. Gets ammo generator and list of timestamps and generates ammo.
+    '''
+    def __init__(self, timestamps, ammo):
+        self.timestamps = timestamps
+        self.ammo = ammo
 
 
 class ConstLoadPlan(object):
@@ -45,3 +56,6 @@ class ConstLoadPlan(object):
         '''Return step duration'''
         self.duration
 
+    def timestamps(self):
+        interval = 1000 / self.rps
+        (i * interval for i in range(0, self.rps * self.duration))
