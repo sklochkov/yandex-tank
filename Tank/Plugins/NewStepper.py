@@ -11,8 +11,7 @@ Tools for preparing phantom input data file
 #import tempfile
 #import tankcore
 
-from itertools import cycle
-
+from itertools import cycle, chain
 
 class HttpAmmo(object):
     def __init__(self, uri, host, method):
@@ -75,6 +74,23 @@ class ConstLoadPlan(object):
         self.duration
 
 
+class CompositeLoadPlan(object):
+    '''Load plan with multiple steps'''
+    def __init__(self, steps):
+        self.steps = steps
+        print steps
+
+    def __iter__(self):
+        base = 0
+        for step in self.steps:
+            for ts in step:
+                yield ts + base
+            base += step.duration * 1000
+
+    def duration(self):
+        return sum(step.duration for step in self.steps)
+
+
 class AmmoFactoryConfigurator(object):
     def __init__(self, config):
         self.config = config
@@ -82,7 +98,9 @@ class AmmoFactoryConfigurator(object):
         self.filter = lambda missile: True
 
     def get_load_plan(self):
-        return ConstLoadPlan(3, 5)
+        #return ConstLoadPlan(3, 5)
+        lp = CompositeLoadPlan([ConstLoadPlan(3, 3), ConstLoadPlan(2, 2)])
+        return lp
 
     def get_missile_generator(self):
         #return SimpleMissileGenerator(HttpAmmo("/", "www.yandex.ru", "GET"))
@@ -107,5 +125,9 @@ class AmmoFactory(object):
     def __iter__(self):
         return ((timestamp, self.marker(missile), missile.to_s()) for timestamp, missile in zip(self.load_plan, self.missile_generator))
 
-af = AmmoFactory(None)
-print(list(af))
+lp = CompositeLoadPlan([ConstLoadPlan(3, 3), ConstLoadPlan(2, 2)])
+#lp = ConstLoadPlan(3, 5)
+print list(zip(xrange(50), lp))
+
+#af = AmmoFactory(None)
+#print(list(af))
