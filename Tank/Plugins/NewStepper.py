@@ -34,13 +34,13 @@ class SimpleMissileGenerator(object):
 
     def __iter__(self):
         while(True):
-            yield self.missile_sample
+            yield self.missile_sample.to_s
 
 
 class UriStyleMissileGenerator(object):
     '''Generates GET ammo based on given URI list'''
     def __init__(self, host, uri_list):
-        self.missiles = cycle([HttpAmmo(uri, host, "GET") for uri in uri_list])
+        self.missiles = cycle([HttpAmmo(uri, host, "GET").to_s for uri in uri_list])
 
     def __iter__(self):
         return self.missiles
@@ -53,7 +53,7 @@ class ConstLoadPlan(object):
         self.duration = duration
 
     def __iter__(self):
-        interval = 1000 / self.rps
+        interval = 1000000 / self.rps
         return (i * interval for i in xrange(0, self.rps * self.duration))
 
     def rps_at(self, t):
@@ -72,14 +72,13 @@ class CompositeLoadPlan(object):
     '''Load plan with multiple steps'''
     def __init__(self, steps):
         self.steps = steps
-        print steps
 
     def __iter__(self):
         base = 0
         for step in self.steps:
             for ts in step:
                 yield ts + base
-            base += step.duration * 1000
+            base += step.duration * 1000000
 
     def duration(self):
         return sum(step.duration for step in self.steps)
@@ -88,23 +87,24 @@ class CompositeLoadPlan(object):
 class AmmoFactoryConfigurator(object):
     def __init__(self, config):
         self.config = config
-        self.marker = lambda missile: "None"
-        self.filter = lambda missile: True
 
     def get_load_plan(self):
         #return ConstLoadPlan(3, 5)
-        lp = CompositeLoadPlan([ConstLoadPlan(3, 3), ConstLoadPlan(2, 2)])
+        lp = CompositeLoadPlan([ConstLoadPlan(1, 10), ConstLoadPlan(2, 20)])
         return lp
 
     def get_missile_generator(self):
         #return SimpleMissileGenerator(HttpAmmo("/", "www.yandex.ru", "GET"))
-        return UriStyleMissileGenerator("www.yandex.ru", ["/", "/list", "/all"])
+        #return UriStyleMissileGenerator("www.yandex.ru", ["/", "/list", "/all"])
+        return AmmoFileReader("ammo.txt")
 
+    '''Filter. Include missile, if true. Reject on false'''
     def get_filter(self):
-        return self.filter
+        return lambda missile: True
 
+    '''Marker. Mark missile with this tag'''
     def get_marker(self):
-        return self.marker
+        return lambda missile: "None"
 
 
 class AmmoFactory(object):
@@ -117,11 +117,42 @@ class AmmoFactory(object):
         self.marker = afc.get_marker()
 
     def __iter__(self):
-        return ((timestamp, self.marker(missile), missile.to_s()) for timestamp, missile in zip(self.load_plan, self.missile_generator))
 
-lp = CompositeLoadPlan([ConstLoadPlan(3, 3), ConstLoadPlan(2, 2)])
+# TODO: refactor. We don't know what's inside missile here. Assume it's a string.
+
+        return ((timestamp, self.marker(missile), missile) for timestamp, missile in zip(self.load_plan, self.missile_generator))
+
+
+class StpdWriter(object):
+    def __init__(self, config):
+        self.af = AmmoFactory(config)
+
+    def generate(self):
+        for timestamp, marker, missile in self.af:
+            print "%s %s %s\n%s\n" % (timestamp, len(missile), marker, missile)
+
+
+class AmmoFileReader(object):
+    def __init__(self, filename):
+        self.ammo_file = open(filename, 'rb')
+
+    def __iter__(self):
+        chunk_header = self.ammo_file.readline()
+        while chunk_header:
+            #chunk_size, marker = chunk_header.split()
+            chunk_size = int(chunk_header)
+
+#TODO: return also a marker somehow
+
+            yield self.ammo_file.read(chunk_size)
+            chunk_header = self.ammo_file.readline()
+
+#lp = CompositeLoadPlan([ConstLoadPlan(3, 3), ConstLoadPlan(2, 2)])
 #lp = ConstLoadPlan(3, 5)
-print list(zip(xrange(50), lp))
+#print list(zip(xrange(50), lp))
 
 #af = AmmoFactory(None)
 #print(list(af))
+
+sw = StpdWriter(None)
+sw.generate()
