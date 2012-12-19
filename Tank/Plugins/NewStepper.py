@@ -11,7 +11,8 @@ Tools for preparing phantom input data file
 #import tempfile
 #import tankcore
 
-from itertools import cycle, chain
+from itertools import cycle
+
 
 class HttpAmmo(object):
     def __init__(self, uri, host, method):
@@ -26,24 +27,17 @@ class HttpAmmo(object):
         return "%s %s %s" % (self.method, self.uri, self.proto)
 
 
-class AbstractMissileGenerator(object):
-    def __iter__(self):
-        return self
-
-    def next(self):
-        raise NotImplemented
-
-
-class SimpleMissileGenerator(AbstractMissileGenerator):
+class SimpleMissileGenerator(object):
     '''Generates ammo based on given sample'''
     def __init__(self, missile_sample):
         self.missile_sample = missile_sample
 
-    def next(self):
-        return self.missile_sample
+    def __iter__(self):
+        while(True):
+            yield self.missile_sample
 
 
-class UriStyleMissileGenerator(AbstractMissileGenerator):
+class UriStyleMissileGenerator(object):
     '''Generates GET ammo based on given URI list'''
     def __init__(self, host, uri_list):
         self.missiles = cycle([HttpAmmo(uri, host, "GET") for uri in uri_list])
