@@ -11,7 +11,7 @@ Tools for preparing phantom input data file
 #import tempfile
 #import tankcore
 
-from itertools import cycle
+from itertools import cycle, izip
 
 
 class HttpAmmo(object):
@@ -30,17 +30,16 @@ class HttpAmmo(object):
 class SimpleMissileGenerator(object):
     '''Generates ammo based on given sample'''
     def __init__(self, missile_sample):
-        self.missile_sample = missile_sample
+        self.missiles = cycle([(missile_sample.to_s(), None)])
 
     def __iter__(self):
-        while(True):
-            yield self.missile_sample.to_s
+        return self.missiles
 
 
 class UriStyleMissileGenerator(object):
     '''Generates GET ammo based on given URI list'''
-    def __init__(self, host, uri_list):
-        self.missiles = cycle([HttpAmmo(uri, host, "GET").to_s for uri in uri_list])
+    def __init__(self, host, uris):
+        self.missiles = cycle([(HttpAmmo(uri, host, "GET").to_s(), None) for uri in uris])
 
     def __iter__(self):
         return self.missiles
@@ -90,13 +89,13 @@ class AmmoFactoryConfigurator(object):
 
     def get_load_plan(self):
         #return ConstLoadPlan(3, 5)
-        lp = CompositeLoadPlan([ConstLoadPlan(1, 10), ConstLoadPlan(2, 20)])
+        lp = CompositeLoadPlan([ConstLoadPlan(10000, 100), ConstLoadPlan(20000, 200)])
         return lp
 
     def get_missile_generator(self):
         #return SimpleMissileGenerator(HttpAmmo("/", "www.yandex.ru", "GET"))
-        #return UriStyleMissileGenerator("www.yandex.ru", ["/", "/list", "/all"])
-        return AmmoFileReader("ammo.txt")
+        return UriStyleMissileGenerator("www.yandex.ru", ["/", "/list", "/all"])
+        #return AmmoFileReader("/home/direvius/ammo.txt")
 
     '''Filter. Include missile, if true. Reject on false'''
     def get_filter(self):
@@ -120,7 +119,7 @@ class AmmoFactory(object):
 
 # TODO: refactor. We don't know what's inside missile here. Assume it's a string.
 
-        return ((timestamp, self.marker(missile), missile) for timestamp, missile in zip(self.load_plan, self.missile_generator))
+        return ((timestamp, marker or self.marker(missile), missile) for timestamp, (missile, marker) in izip(self.load_plan, self.missile_generator))
 
 
 class StpdWriter(object):
@@ -144,8 +143,12 @@ class AmmoFileReader(object):
 
 #TODO: return also a marker somehow
 
-            yield self.ammo_file.read(chunk_size)
+            yield (self.ammo_file.read(chunk_size), None)
             chunk_header = self.ammo_file.readline()
+
+            if not chunk_header:
+                self.ammo_file.seek(0)
+                chunk_header = self.ammo_file.readline()
 
 #lp = CompositeLoadPlan([ConstLoadPlan(3, 3), ConstLoadPlan(2, 2)])
 #lp = ConstLoadPlan(3, 5)
