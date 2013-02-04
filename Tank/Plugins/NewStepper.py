@@ -85,14 +85,11 @@ class LineLoadPlan(object):
         '''
         def timestamp(n):
             return int((math.sqrt(b * b + 8 * n / k) - b) * 500000) # (sqrt(b^2 + 8 * n / k) - b) / 2 -- time in seconds
-        nmax = int(k / 2 * self.duration ** 2 + (k / 2 + self.maxrps - self.minrps) * self.duration)
-        #n = 0
-        #t = timestamp(n)
-        #while t < self.duration * 1000000:
-        #    yield t
-        #    n += 1
-        #    t = timestamp(n)
-        return (int(timestamp(n) for n in xrange(0, nmax))
+
+        ''' Find ammo number given the time '''
+        def number(t):
+            return int(k * (t ** 2) / 2 + (k / 2 + self.minrps) * self.duration)
+        return (timestamp(n) for n in xrange(0, number(self.duration)))
 
     def rps_at(self, t):
         '''Return rps for second t'''
@@ -199,5 +196,5 @@ class AmmoFileReader(object):
 #sw = StpdWriter(None)
 #sw.generate()
 
-lp = LineLoadPlan(20, 100, 100)
+lp = LineLoadPlan(20, 0, 100)
 print list((k, len(list(v))) for k, v in groupby(t / 1000000 for t in lp))
