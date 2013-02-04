@@ -85,13 +85,14 @@ class LineLoadPlan(object):
         '''
         def timestamp(n):
             return int((math.sqrt(b * b + 8 * n / k) - b) * 500000) # (sqrt(b^2 + 8 * n / k) - b) / 2 -- time in seconds
-        n = 0
-        t = timestamp(n)
-        while t < self.duration * 1000000:
-            yield t
-            n += 1
-            t = timestamp(n)
-        #return (int((math.sqrt(1 + 8 * n / k) - 0.25) * 1000000 / 2) for n in xrange(0, (self.maxrps - self.minrps) * self.duration / 2))
+        nmax = int(k / 2 * self.duration ** 2 + (k / 2 + self.maxrps - self.minrps) * self.duration)
+        #n = 0
+        #t = timestamp(n)
+        #while t < self.duration * 1000000:
+        #    yield t
+        #    n += 1
+        #    t = timestamp(n)
+        return (int(timestamp(n) for n in xrange(0, nmax))
 
     def rps_at(self, t):
         '''Return rps for second t'''
