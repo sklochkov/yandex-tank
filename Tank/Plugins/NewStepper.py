@@ -10,8 +10,8 @@ Tools for preparing phantom input data file
 #import re
 #import tempfile
 #import tankcore
-
-from itertools import cycle, izip
+import math
+from itertools import cycle, izip, groupby
 
 
 class HttpAmmo(object):
@@ -66,6 +66,43 @@ class ConstLoadPlan(object):
         '''Return step duration'''
         self.duration
 
+class LineLoadPlan(object):
+    '''Load plan with linear load'''
+    def __init__(self, minrps, maxrps, duration):
+        self.minrps = minrps
+        self.maxrps = maxrps
+        self.duration = duration
+
+    def __iter__(self):
+        k = float(self.maxrps - self.minrps) / self.duration
+        b = 1 + 2 * self.minrps / k
+
+        '''
+        Solve equation:
+        n(t) = k/2 * t^2 + (k/2 + r0) * t
+        where r(t) = k(t + 1/2) + r0 -- rps
+        r0 is initial rps.
+        '''
+        def timestamp(n):
+            return int((math.sqrt(b * b + 8 * n / k) - b) * 500000) # (sqrt(b^2 + 8 * n / k) - b) / 2 -- time in seconds
+        n = 0
+        t = timestamp(n)
+        while t < self.duration * 1000000:
+            yield t
+            n += 1
+            t = timestamp(n)
+        #return (int((math.sqrt(1 + 8 * n / k) - 0.25) * 1000000 / 2) for n in xrange(0, (self.maxrps - self.minrps) * self.duration / 2))
+
+    def rps_at(self, t):
+        '''Return rps for second t'''
+        if t <= self.duration:
+            return self.rps
+        else:
+            return 0
+
+    def duration(self):
+        '''Return step duration'''
+        self.duration
 
 class CompositeLoadPlan(object):
     '''Load plan with multiple steps'''
@@ -89,7 +126,8 @@ class AmmoFactoryConfigurator(object):
 
     def get_load_plan(self):
         #return ConstLoadPlan(3, 5)
-        lp = CompositeLoadPlan([ConstLoadPlan(10000, 100), ConstLoadPlan(20000, 200)])
+        #lp = CompositeLoadPlan([ConstLoadPlan(10000, 100), ConstLoadPlan(20000, 200)])
+        lp = LineLoadPlan(0, 10, 10)
         return lp
 
     def get_missile_generator(self):
@@ -157,5 +195,8 @@ class AmmoFileReader(object):
 #af = AmmoFactory(None)
 #print(list(af))
 
-sw = StpdWriter(None)
-sw.generate()
+#sw = StpdWriter(None)
+#sw.generate()
+
+lp = LineLoadPlan(20, 100, 100)
+print list((k, len(list(v))) for k, v in groupby(t / 1000000 for t in lp))
