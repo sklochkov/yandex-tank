@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.6
-Release:	3
+Release:	4
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -94,7 +94,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 chmod 777 /var/lock
-if [ $1 -eq 1 -o $1 -eq 2 ] then
+if [ $1 -eq 1 -o $1 -eq 2 ] ; then
 	if [ ! -e /usr/bin/lunapark ] ; then
 		ln -sf /usr/lib/yandex-tank/tank.py /usr/bin/lunapark
 	fi
