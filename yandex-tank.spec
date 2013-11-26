@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.6
-Release:	5
+Release:	6
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -33,7 +33,7 @@ Yandex.Tank (Load Testing Tool)
 %{__rm} -rf %{buildroot}
 
 install -d -m 755 %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector/agent
-install -d -m 755 %{buildroot}/usr/lib/yandex-tank/Tank/Plugins
+install -d -m 755 %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/bfg
 install -d -m 755 %{buildroot}/usr/lib/yandex-tank/Tank/stepper
 #Tank/MonCollector/agent
 #Tank/Plugins
