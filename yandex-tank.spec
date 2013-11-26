@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.6
-Release:	4
+Release:	5
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -71,6 +71,19 @@ install -m755 Tank/Plugins/Phantom.py %{buildroot}/usr/lib/yandex-tank/Tank/Plug
 install -m755 Tank/Plugins/online.html %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/online.html
 install -m755 Tank/Plugins/JMeter.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/JMeter.py
 install -m755 Tank/Plugins/phantom.conf.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/phantom.conf.tpl
+install -m755 Tank/Plugins/bfg/guns.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/bfg/guns.py
+install -m755 Tank/Plugins/bfg/__init__.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/bfg/__init__.py
+install -m755 Tank/Plugins/bfg/plugin.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/bfg/plugin.py
+install -m755 Tank/Plugins/BFG.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/BFG.py
+install -m755 Tank/Plugins/bfg/reader.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/bfg/reader.py
+install -m755 Tank/Plugins/bfg/widgets.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/bfg/widgets.py
+install -m755 Tank/Plugins/bfg/worker.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/bfg/worker.py
+install -m755 Tank/Plugins/graphite.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/graphite.tpl
+install -m755 Tank/Plugins/jmeter_argentum.xml %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/jmeter_argentum.xml
+install -m755 Tank/Plugins/RCAssert.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/RCAssert.py
+install -m755 Tank/Plugins/Report.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/Report.py
+install -m755 Tank/Plugins/UniversalPhoutShooter.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/UniversalPhoutShooter.py
+
 #install -m755 Tank/stepper/Stepper.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/Stepper.py
 install -m755 Tank/stepper/config.py  %{buildroot}/usr/lib/yandex-tank/Tank/stepper/config.py
 install -m755 Tank/stepper/util.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/util.py
