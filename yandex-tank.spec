@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.6
-Release:	1
+Release:	2
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -74,8 +74,8 @@ install -m755 Tank/Plugins/phantom.conf.tpl %{buildroot}/usr/lib/yandex-tank/Tan
 #install -m755 Tank/stepper/Stepper.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/Stepper.py
 install -m755 Tank/stepper/config.py  %{buildroot}/usr/lib/yandex-tank/Tank/stepper/config.py
 install -m755 Tank/stepper/util.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/util.py
-install -m755 Tank/stepper/mark.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/util.py
-install -m755 Tank/stepper/missile.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/mark.py
+install -m755 Tank/stepper/mark.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/mark.py
+install -m755 Tank/stepper/missile.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/missile.py
 install -m755 Tank/stepper/load_plan.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/load_plan.py
 install -m755 Tank/stepper/instance_plan.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/instance_plan.py
 install -m755 Tank/stepper/format.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/format.py
