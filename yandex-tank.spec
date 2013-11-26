@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.6
-Release:	2
+Release:	3
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -94,22 +94,25 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 chmod 777 /var/lock
-if [ ! -e /usr/bin/lunapark ] ; then
-	ln -sf /usr/lib/yandex-tank/tank.py /usr/bin/lunapark
+if [ $1 -eq 1 -o $1 -eq 2 ] then
+	if [ ! -e /usr/bin/lunapark ] ; then
+		ln -sf /usr/lib/yandex-tank/tank.py /usr/bin/lunapark
+	fi
+	if [ ! -e /usr/bin/yandex-tank ] ; then
+        	ln -sf /usr/lib/yandex-tank/tank.py /usr/bin/yandex-tank
+	fi
+	if [ ! -e /usr/bin/yandex-tank-ab ] ; then
+        	ln -sf /usr/lib/yandex-tank/ab.sh /usr/bin/yandex-tank-ab
+	fi
+	if [ ! -e /usr/bin/yandex-tank-jmeter ] ; then
+        	ln -sf /usr/lib/yandex-tank/jmeter.sh /usr/bin/yandex-tank-jmeter
+	fi
 fi
-if [ ! -e /usr/bin/yandex-tank ] ; then
-        ln -sf /usr/lib/yandex-tank/tank.py /usr/bin/yandex-tank
-fi
-if [ ! -e /usr/bin/yandex-tank-ab ] ; then
-        ln -sf /usr/lib/yandex-tank/ab.sh /usr/bin/yandex-tank-ab
-fi
-if [ ! -e /usr/bin/yandex-tank-jmeter ] ; then
-        ln -sf /usr/lib/yandex-tank/jmeter.sh /usr/bin/yandex-tank-jmeter
-fi
-
 
 %preun
-rm -f /usr/bin/lunapark /usr/bin/yandex-tank /usr/bin/yandex-tank-ab /usr/bin/yandex-tank-jmeter
+if [ $1 -eq 0 ] ; then
+	rm -f /usr/bin/lunapark /usr/bin/yandex-tank /usr/bin/yandex-tank-ab /usr/bin/yandex-tank-jmeter
+fi
 
 %files
 %defattr(-,root,root)
