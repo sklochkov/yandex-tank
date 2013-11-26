@@ -35,6 +35,9 @@ class AutostopPlugin(AbstractPlugin, AggregateResultListener):
         ''' add new criteria class '''
         self.custom_criterias += [criteria_class]
     
+    def get_available_options(self):
+        return ["autostop"]
+    
     def configure(self):
         aggregator = self.core.get_plugin_of_type(AggregatorPlugin)
         aggregator.add_result_listener(self)
@@ -356,7 +359,7 @@ class QuantileCriteria(AbstractCriteria):
     
     def notify(self, aggregate_second):
         if not (self.quantile in aggregate_second.overall.quantiles.keys()):
-            self.log.warning("No qunatile %s in %s", self.quantile, aggregate_second.overall.quantiles)
+            self.log.warning("No quantile %s in %s", self.quantile, aggregate_second.overall.quantiles)
         if self.quantile in aggregate_second.overall.quantiles.keys() \
                 and aggregate_second.overall.quantiles[self.quantile] > self.rt_limit:
             if not self.seconds_count:

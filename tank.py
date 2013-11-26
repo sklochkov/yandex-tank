@@ -1,5 +1,5 @@
 #! /usr/bin/python
-from Tank.ConsoleWorker import ConsoleTank
+from Tank.ConsoleWorker import ConsoleTank, CompletionHelperOptionParser
 from optparse import OptionParser
 import logging
 import os
@@ -19,6 +19,10 @@ if __name__ == "__main__":
     parser.add_option('-q', '--quiet', action='store_true', help="Less console output, only errors and warnings")
     parser.add_option('-s', '--scheduled-start', action='store', dest='scheduled_start', help="Start test at specified time, format 'YYYY-MM-DD hh:mm:ss', date part is optional")
     parser.add_option('-v', '--verbose', action='store_true', help="More console output, +debug messages")
+
+    completion_helper = CompletionHelperOptionParser()
+    completion_helper.handle_request(parser)
+        
     options, ammofile = parser.parse_args()
 
     worker = ConsoleTank(options, ammofile)

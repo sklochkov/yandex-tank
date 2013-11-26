@@ -23,8 +23,11 @@ class  ConsoleWorkerTestCase(TankTests.TankTestCase):
     def test_perform(self):
         self.foo.configure()
 
-        console = self.foo.core.get_plugin_of_type(ConsoleOnlinePlugin)
-        console.console_markup = FakeConsoleMarkup()
+        try:
+            console = self.foo.core.get_plugin_of_type(ConsoleOnlinePlugin)
+            console.console_markup = FakeConsoleMarkup()
+        except:
+            pass
         
         if self.foo.perform_test() != 0:
             raise RuntimeError()
@@ -32,7 +35,7 @@ class  ConsoleWorkerTestCase(TankTests.TankTestCase):
         
     def test_option_override(self):
         options = FakeOptions()
-        options.config = ["config/old-style.conf"]
+        options.config = ["config/phantom.conf"]
         options.option = ["owner.address=overridden"]
         self.foo = ConsoleTank(options, None)
         self.foo.configure()
@@ -40,12 +43,6 @@ class  ConsoleWorkerTestCase(TankTests.TankTestCase):
         logging.debug(res)
         self.assertEquals("overridden", res)
 
-
-    def test_option_old_convert(self):
-        options = FakeOptions()
-        options.config = ["data/old_to_migrate.conf"]
-        self.foo = ConsoleTank(options, None)
-        self.foo.configure()
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,7 +1,6 @@
 debian/yandex-load-tank-base
 debian/yandex-load-tank-base.substvars
 build-stamp
-*.ammo
 *.stpd
 dummy.*.conf
 configure-stamp
@@ -12,3 +11,8 @@ configure-stamp
 debian/files
 *.debhelper
 Tank/Plugins/DataUploader.py
+Tests/nosetests.xml
+load.ini
+tmp/
+Tests/data/modified_*.jmx
+Tests/20*/lunapark_*.lock

@@ -5,7 +5,7 @@ from tankcore import AbstractPlugin
 import logging
 import sys
 import traceback
-
+import os, fcntl
 
 class ConsoleOnlinePlugin(AbstractPlugin, AggregateResultListener):
     ''' Console plugin '''
@@ -23,6 +23,9 @@ class ConsoleOnlinePlugin(AbstractPlugin, AggregateResultListener):
     @staticmethod
     def get_key():
         return __file__
+    
+    def get_available_options(self):
+        return ["info_panel_width", "short_only", "disable_all_colors", "disable_colors"]
     
     def configure(self):
         self.info_panel_width = self.get_option("info_panel_width", self.info_panel_width)
@@ -43,6 +46,8 @@ class ConsoleOnlinePlugin(AbstractPlugin, AggregateResultListener):
             self.screen.block_rows = []
             self.screen.info_panel_percent = 100
 
+        #nf = fcntl.fcntl(sys.stdout.fileno(), fcntl.F_UNLCK)
+        #fcntl.fcntl(sys.stdout.fileno(), fcntl.F_SETFL , nf | os.O_NONBLOCK )
 
     def is_test_finished(self):
         try:
@@ -54,6 +59,7 @@ class ConsoleOnlinePlugin(AbstractPlugin, AggregateResultListener):
 
         if console_view:
             if not self.short_only:
+                self.log.debug("Writing console view to STDOUT")
                 sys.stdout.write(self.console_markup.clear)
                 sys.stdout.write(console_view)
                 sys.stdout.write(self.console_markup.TOTAL_RESET)
@@ -68,7 +74,7 @@ class ConsoleOnlinePlugin(AbstractPlugin, AggregateResultListener):
         self.screen.add_second_data(second_aggregate_data)    
         if self.short_only:
             tpl = "Time: %s\tExpected RPS: %s\tActual RPS: %s\tActive Threads: %s\tAvg RT: %s"
-            ovr = second_aggregate_data.overall # just to see the next line in IDE
+            ovr = second_aggregate_data.overall  # just to see the next line in IDE
             data = (second_aggregate_data.time, ovr.planned_requests, ovr.RPS,
                     ovr.active_threads, ovr.avg_response_time)
             self.log.info(tpl % data)

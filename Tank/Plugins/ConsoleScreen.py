@@ -1,8 +1,5 @@
-'''
-Classes to build full console screen
-'''
+''' Classes to build full console screen '''
 from Tank.Plugins import Codes
-from Tank.Plugins.Aggregator import SecondAggregateDataItem
 import copy
 import fcntl
 import logging
@@ -53,9 +50,7 @@ def krutilka():
 
 
 class Screen(object):
-    '''
-    Console screen renderer class
-    '''
+    '''     Console screen renderer class    '''
     RIGHT_PANEL_SEPARATOR = ' . '
     
     def __init__(self, info_panel_width, markup_provider):
@@ -77,9 +72,7 @@ class Screen(object):
         self.block_rows = [[CurrentTimesDistBlock(self), block5]]
         
     def __get_right_line(self, widget_output):
-        '''
-        Gets next line for right panel
-        '''
+        '''        Gets next line for right panel        '''
         right_line = ''
         if widget_output:
             right_line = widget_output.pop(0)
@@ -91,9 +84,8 @@ class Screen(object):
 
 
     def __render_left_panel(self):
-        '''
-        Render left blocks 
-        '''
+        ''' Render left blocks '''
+        self.log.debug("Rendering left blocks")
         lines = []
         for row in self.block_rows:
             space_left = self.left_panel_width
@@ -123,9 +115,7 @@ class Screen(object):
 
 
     def render_screen(self):
-        '''
-        Main method to render screen view
-        '''
+        '''        Main method to render screen view        '''
         self.term_width, self.term_height = get_terminal_size()
         self.log.debug("Terminal size: %sx%s", self.term_width, self.term_height)
         self.right_panel_width = int((self.term_width - len(self.RIGHT_PANEL_SEPARATOR)) * (float(self.info_panel_percent) / 100)) - 1
@@ -147,22 +137,22 @@ class Screen(object):
 
         left_lines = self.__render_left_panel()
 
+        self.log.debug("Composing final screen output")
         output = []        
         for line_no in range(1, self.term_height):
             line = " "
 
             if line_no > 1 and left_lines:
                 left_line = left_lines.pop(0)
+                left_line_plain = self.markup.clean_markup(left_line)
                 if len(left_line) > self.left_panel_width:
-                    left_line_plain = self.markup.clean_markup(left_line)
                     if len(left_line_plain) > self.left_panel_width:
                         left_line = left_line[:self.left_panel_width] + self.markup.RESET
                 
-                left_line += (' ' * (self.left_panel_width - len(self.markup.clean_markup(left_line)))) 
+                left_line += (' ' * (self.left_panel_width - len(left_line_plain))) 
                 line += left_line     
             else:
                 line += ' ' * self.left_panel_width
-
             if self.right_panel_width:
                 line += (self.RIGHT_PANEL_SEPARATOR)
                 right_line = self.__get_right_line(widget_output)
@@ -438,34 +428,15 @@ class TotalQuantilesBlock(AbstractBlock):
         AbstractBlock.__init__(self, screen)
         self.total_count = 0
         self.current_max_rt = 0
-        self.times_dist = {}
+        self.quantiles = {}
 
     def add_second(self, data):
-        self.times_dist = data.cumulative.times_dist
-        self.total_count = data.cumulative.total_count
-        if data.cumulative.times_dist:
-            self.current_max_rt = data.cumulative.times_dist[max(data.cumulative.times_dist.keys())]['to']
+        self.quantiles=data.cumulative.quantiles
       
     def render(self):
         self.lines = []
-        quan = 0
-        quantiles = copy.copy(SecondAggregateDataItem.QUANTILES)
-        item = None
-        for key, item in sorted(self.times_dist.iteritems()):
-            if self.total_count: 
-                perc = float(item['count']) / self.total_count
-            else:
-                perc = 1
-            quan += perc 
-
-            while quantiles and quan >= quantiles[0]:
-                line = self.__format_line(quantiles.pop(0), item['to'])
-                self.width = max(self.width, len(line))
-                self.lines.append(line)
-
-        # get rests   
-        while quantiles and item:
-            line = self.__format_line(quantiles.pop(0), item['to'])
+        for quant in sorted(self.quantiles):
+            line = self.__format_line(quant, self.quantiles[quant])
             self.width = max(self.width, len(line))
             self.lines.append(line)
 
@@ -477,7 +448,7 @@ class TotalQuantilesBlock(AbstractBlock):
         ''' Format line '''
         timing_len = str(len(str(self.current_max_rt)))
         tpl = '   %3d%% < %' + timing_len + 'd ms'
-        data = (100 * quan, timing)
+        data = (quan, timing)
         left_line = tpl % data
         return left_line
 
@@ -636,7 +607,7 @@ class CasesBlock(AbstractBlock):
                 self.cases[name] = [0, 0]
                 self.max_case_len = max(self.max_case_len, len(name))
             self.cases[name][0] += case.RPS
-            self.cases[name][1] += case.avg_response_time
+            self.cases[name][1] += case.avg_response_time * case.RPS
             self.count += case.RPS
         
     def render(self):
