@@ -4,8 +4,8 @@
 %define _rpmdir		.
 
 Name:		yandex-tank
-Version:	1.3.6
-Release:	6
+Version:	1.4.6
+Release:	1
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -34,6 +34,7 @@ Yandex.Tank (Load Testing Tool)
 
 install -d -m 755 %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector/agent
 install -d -m 755 %{buildroot}/usr/lib/yandex-tank/Tank/Plugins
+install -d -m 755 %{buildroot}/usr/lib/yandex-tank/Tank/stepper
 #Tank/MonCollector/agent
 #Tank/Plugins
 install -d -m 755 %{buildroot}/etc/yandex-tank
@@ -70,7 +71,18 @@ install -m755 Tank/Plugins/Phantom.py %{buildroot}/usr/lib/yandex-tank/Tank/Plug
 install -m755 Tank/Plugins/online.html %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/online.html
 install -m755 Tank/Plugins/JMeter.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/JMeter.py
 install -m755 Tank/Plugins/phantom.conf.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/phantom.conf.tpl
-install -m755 Tank/Plugins/Stepper.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/Stepper.py
+#install -m755 Tank/stepper/Stepper.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/Stepper.py
+install -m755 Tank/stepper/config.py  %{buildroot}/usr/lib/yandex-tank/Tank/stepper/config.py
+install -m755 Tank/stepper/util.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/util.py
+install -m755 Tank/stepper/mark.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/util.py
+install -m755 Tank/stepper/missile.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/mark.py
+install -m755 Tank/stepper/load_plan.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/load_plan.py
+install -m755 Tank/stepper/instance_plan.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/instance_plan.py
+install -m755 Tank/stepper/format.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/format.py
+install -m755 Tank/stepper/info.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/info.py
+install -m755 Tank/stepper/main.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/main.py
+install -m755 Tank/stepper/__init__.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/__init__.py
+install -m755 Tank/stepper/module_exceptions.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/module_exceptions.py
 install -m755 tankcore.py %{buildroot}/usr/lib/yandex-tank/tankcore.py
 install -m755 tank.py %{buildroot}/usr/lib/yandex-tank/tank.py
 install -m755 *.sh %{buildroot}/usr/lib/yandex-tank/
