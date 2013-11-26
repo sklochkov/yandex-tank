@@ -3,6 +3,7 @@
 from tankcore import AbstractPlugin
 import tankcore
 import time
+import os
 
 class ResourceCheckPlugin(AbstractPlugin):
     '''   Plugin to check system resources    '''
@@ -46,10 +47,12 @@ class ResourceCheckPlugin(AbstractPlugin):
 
     def __check_disk(self):
         ''' raise exception on disk space exceeded '''
-        cmd = "df --no-sync -m -P -l -x fuse -x tmpfs -x devtmpfs -x davfs -x nfs "
-        cmd += self.core.artifacts_base_dir
-        cmd += " | tail -n 1 | awk '{print $4}'"
-        disk_free = tankcore.execute(cmd, True, 0.1, True)[1]
+        #cmd = "df --no-sync -m -P -l -x fuse -x tmpfs -x devtmpfs -x davfs -x nfs "
+        #cmd += self.core.artifacts_base_dir
+        #cmd += " | tail -n 1 | awk '{print $4}'"
+        #disk_free = tankcore.execute(cmd, True, 0.1, True)[1]
+	arr = os.statvfs(self.core.artifacts_base_dir)
+        disk_free = str(int(arr[0]*arr[3]/(1024*1024)))
         self.log.debug("Disk free space: %s/%s", disk_free.strip(), self.disk_limit)
         if int(disk_free.strip()) < self.disk_limit:
             raise RuntimeError("Not enough local resources: disk space less than %sMB in %s: %sMB" % (self.disk_limit, self.core.artifacts_base_dir, int(disk_free.strip()))) 
@@ -58,7 +61,11 @@ class ResourceCheckPlugin(AbstractPlugin):
     def __check_mem(self):
         ''' raise exception on RAM exceeded '''
         cmd = "free -m | awk '$1==\"-/+\" {print $4}'"
-        mem_free = int(tankcore.execute(cmd, True, 0.1, True)[1].strip())
+	# Dirty hook for RHEL
+	try:
+        	mem_free = int(tankcore.execute(cmd, True, 0.1, True)[1].strip())
+	except:
+		return True
         self.log.debug("Memory free: %s/%s", mem_free, self.mem_limit)
         if mem_free < self.mem_limit:
             raise RuntimeError("Not enough resources: free memory less than %sMB: %sMB" % (self.mem_limit, mem_free)) 
