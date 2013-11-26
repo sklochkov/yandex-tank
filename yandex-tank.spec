@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.6
-Release:	6
+Release:	7
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
