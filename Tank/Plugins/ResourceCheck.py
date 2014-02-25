@@ -55,7 +55,7 @@ class ResourceCheckPlugin(AbstractPlugin):
         #cmd += self.core.artifacts_base_dir
         #cmd += " | tail -n 1 | awk '{print $4}'"
         #disk_free = tankcore.execute(cmd, True, 0.1, True)[1]
-	    arr = os.statvfs(self.core.artifacts_base_dir)
+        arr = os.statvfs(self.core.artifacts_base_dir)
         disk_free = str(int(arr[0]*arr[3]/(1024*1024)))
         #cmd = "sh -c \"df --no-sync -m -P -l -x fuse -x tmpfs -x devtmpfs -x davfs -x nfs "
         #cmd += self.core.artifacts_base_dir
