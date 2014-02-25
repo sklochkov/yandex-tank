@@ -1,5 +1,4 @@
 ''' Utility classes for phantom module '''
-from Tank.stepper import StepperWrapper
 from ipaddr import AddressValueError
 import copy
 import ipaddr
@@ -9,10 +8,13 @@ import os
 import socket
 import string
 
+from Tank.stepper import StepperWrapper
+
+
+
 
 # TODO: use separate answ log per benchmark
 class PhantomConfig:
-
     ''' config file generator '''
     OPTION_PHOUT = "phout_file"
     SECTION = 'phantom'
@@ -60,7 +62,7 @@ class PhantomConfig:
 
         self.answ_log = self.core.mkstemp(".log", "answ_")
         self.core.add_artifact_file(self.answ_log)
-        self.phout_file = self.core.get_option(self.SECTION, self.OPTION_PHOUT, '')  
+        self.phout_file = self.core.get_option(self.SECTION, self.OPTION_PHOUT, '')
         if not self.phout_file:
             self.phout_file = self.core.mkstemp(".log", "phout_")
             self.core.set_option(self.SECTION, self.OPTION_PHOUT, self.phout_file)
@@ -77,7 +79,8 @@ class PhantomConfig:
 
         for section in self.core.config.find_sections(self.SECTION + '-'):
             self.streams.append(
-                StreamConfig(self.core, len(self.streams), self.phout_file, self.answ_log, self.answ_log_level, self.timeout, section))
+                StreamConfig(self.core, len(self.streams), self.phout_file, self.answ_log, self.answ_log_level,
+                             self.timeout, section))
 
         for stream in self.streams:
             stream.read_config()
@@ -102,7 +105,7 @@ class PhantomConfig:
         filename = self.core.mkstemp(".conf", "phantom_")
         self.core.add_artifact_file(filename)
         self.log.debug("Generating phantom config: %s", filename)
-        tpl_file = open(os.path.dirname(__file__) + "/phantom.conf.tpl", 'r')
+        tpl_file = open(os.path.dirname(__file__) + "/phantom/phantom.conf.tpl", 'r')
         template_str = tpl_file.read()
         tpl_file.close()
         tpl = string.Template(template_str)
@@ -172,7 +175,6 @@ class PhantomConfig:
 
 
 class StreamConfig:
-
     ''' each test stream's config '''
 
     OPTION_INSTANCES_LIMIT = 'instances'
@@ -241,7 +243,19 @@ class StreamConfig:
 
         self.address = self.get_option('address', 'localhost')
         self.port = self.get_option('port', '80')
-        self.__resolve_address()
+
+        #address check section
+        self.ip_resolved_check = False
+        if not self.ip_resolved_check:
+            self.__address_ipv4_check()
+        if not self.ip_resolved_check:
+            self.__address_ipv6_check()
+        if not self.ip_resolved_check:
+            self.__resolve_address()
+        if not self.ip_resolved_check:
+            raise RuntimeError(
+                "Check what you entered as an address in config. If there is a hostname, check what you get due to DNS lookup",
+                self.address)
 
         self.stepper_wrapper.read_config()
 
@@ -261,7 +275,7 @@ class StreamConfig:
         kwargs[
             'ssl_transport'] = "transport_t ssl_transport = transport_ssl_t { timeout = 1s }\n transport = ssl_transport" if self.ssl else ""
         kwargs['method_stream'] = self.method_prefix + \
-            "_ipv6_t" if self.ipv6 else self.method_prefix + "_ipv4_t"
+                                  "_ipv6_t" if self.ipv6 else self.method_prefix + "_ipv4_t"
         kwargs['phout'] = self.phout_file
         kwargs['answ_log'] = self.answ_log
         kwargs['answ_log_level'] = self.answ_log_level
@@ -303,7 +317,7 @@ class StreamConfig:
             fname = 'phantom_benchmark_main.tpl'
         else:
             fname = 'phantom_benchmark_additional.tpl'
-        tplf = open(os.path.dirname(__file__) + '/' + fname, 'r')
+        tplf = open(os.path.dirname(__file__) + '/phantom/' + fname, 'r')
         template_str = tplf.read()
         tplf.close()
         tpl = string.Template(template_str)
@@ -311,46 +325,96 @@ class StreamConfig:
 
         return config
 
-    # FIXME: this method became a piece of shit, needs refactoring
-    def __resolve_address(self):
-        ''' Analyse target address setting, resolve it to IP '''
+    def __address_ipv4_check(self):
+        ''' Analyse target address, IPv4 '''
+        self.ip_resolved_check = False
+        if not self.address:
+            raise RuntimeError("Target address not specified")
+        #IPv4 check
+        try:
+            address_final = ipaddr.IPv4Address(self.address)
+        except AddressValueError:
+            self.log.debug(
+                "%s is not IPv4 address", self.address)
+        else:
+            self.ipv6 = False
+            self.ip_resolved_check = True
+            self.resolved_ip = address_final
+            self.log.debug(
+                "%s is IPv4 address", self.address)
+        #IPv4:port check
+        try:
+            address_port = self.address.split(":")
+            address_final = ipaddr.IPv4Address(address_port[0])
+            if len(address_port) > 1:
+                self.port = address_port[1]
+        except AddressValueError:
+            self.log.debug(
+                "%s is not IPv4 address:port", self.address)
+        else:
+            self.ipv6 = False
+            self.ip_resolved_check = True
+            self.resolved_ip = address_final
+            self.log.debug(
+                "%s is IPv4 address and %s is port", address_final, self.port)
+
+    def __address_ipv6_check(self):
+        ''' Analyse target address, IPv6 '''
+        self.ip_resolved_check = False
         if not self.address:
             raise RuntimeError("Target address not specified")
         try:
-            ipaddr.IPv6Address(self.address)
-            self.ipv6 = True
-            self.resolved_ip = self.address
-            try:
-                self.address = socket.gethostbyaddr(self.resolved_ip)[0]
-            except Exception, exc:
-                self.log.debug("Failed to get hostname for ip: %s", exc)
-                self.address = self.resolved_ip
+            address_final = ipaddr.IPv6Address(self.address)
         except AddressValueError:
-            self.log.debug("Not ipv6 address: %s", self.address)
-            self.ipv6 = False
+            self.log.debug(
+                "%s is not IPv6 address", self.address)
+        else:
+            self.ipv6 = True
+            self.ip_resolved_check = True
+            self.resolved_ip = address_final
+            self.log.debug(
+                "%s is IPv6 address", address_final)
+
+    def __resolve_address(self):
+        ''' Resolve hostname to IPv4/IPv6 and analyse what has been resolved '''
+        self.ip_resolved_check = False
+        if not self.address:
+            raise RuntimeError("Target address not specified")
+        #hostname to ip address lookup
+        try:
             address_port = self.address.split(":")
-            self.address = address_port[0]
+            ip_addr_list_of_tuples = socket.getaddrinfo(address_port[0], None, socket.AF_UNSPEC)[0]
+            ip_addr_tuple = list(ip_addr_list_of_tuples[4])
+            address_final = ip_addr_tuple[0]
             if len(address_port) > 1:
                 self.port = address_port[1]
+            self.log.debug(
+                "%s resolved to IP address: %s", address_port[0], address_final)
+            #check if resolved IP is IPv4 or IPv6
             try:
-                ipaddr.IPv4Address(self.address)
-                self.resolved_ip = self.address
-                try:
-                    self.address = socket.gethostbyaddr(self.resolved_ip)[0]
-                except Exception, exc:
-                    self.log.debug("Failed to get hostname for ip: %s", exc)
-                    self.address = self.resolved_ip
+                ipaddr.IPv4Address(address_final)
             except AddressValueError:
-                self.log.debug("Not ipv4 address: %s", self.address)
-                # TODO: use getaddrinfo to support IPv6
-                ip_addr = socket.gethostbyname(self.address)
-                reverse_name = socket.gethostbyaddr(ip_addr)[0]
                 self.log.debug(
-                    "Address %s ip_addr: %s, reverse-resolve: %s", self.address, ip_addr, reverse_name)
-                if reverse_name.startswith(self.address):
-                    self.resolved_ip = ip_addr
-                else:
-                    raise ValueError(
-                        "Address %s reverse-resolved to %s, but must match" % (self.address, reverse_name))
+                    "Resolved address %s is not IPv4", address_final)
+            else:
+                self.ipv6 = False
+                self.ip_resolved_check = True
+                self.resolved_ip = address_final
+                self.log.debug(
+                    "Resolved address %s is IPv4", address_final)
+            try:
+                ipaddr.IPv6Address(address_final)
+            except AddressValueError:
+                self.log.debug(
+                    "Resolved address %s is not IPv6", address_final)
+            else:
+                self.ipv6 = True
+                self.ip_resolved_check = True
+                self.resolved_ip = address_final
+                self.log.debug(
+                    "Resolved address %s is IPv6", address_final)
+        except socket.error:
+            raise RuntimeError(
+                "Unable to resolve hostname", self.address)
 
 # ========================================================================

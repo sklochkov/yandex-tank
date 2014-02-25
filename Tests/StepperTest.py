@@ -2,6 +2,7 @@ import tempfile
 import os
 
 from Tank.stepper import Stepper
+from Tank.stepper.format import StpdReader
 from Tests.TankTests import TankTestCase
 
 
@@ -134,10 +135,52 @@ class StepperTestCase(TankTestCase):
                 rps_schedule=[],
                 instances_schedule=[],
                 loop_limit=-1,
-                ammo_limit=100,
+                ammo_limit=10,
+                ammo_type='access',
+                headers=[],
                 ammo_file="data/access1.log",
             ).write(stpd_file)
         res = open(temp_stpd, 'r').read()
-        # TODO: enable asserts after fixing the exception
-        #self.assertNotEquals("", res)
-        #self.assertEquals(126, os.path.getsize(temp_stpd))
+        self.assertNotEquals("", res)
+        self.assertEquals(1459, os.path.getsize(temp_stpd))
+
+    def test_empty_uri(self):
+        from Tank.stepper.module_exceptions import AmmoFileError
+        temp_stpd = tempfile.mkstemp()[1]
+        with open(temp_stpd, 'w') as stpd_file:
+            with self.assertRaises(AmmoFileError):
+                Stepper(
+                    rps_schedule=[],
+                    instances_schedule=[],
+                    loop_limit=-1,
+                    ammo_limit=10,
+                    headers=[],
+                    ammo_file="data/empty.uri",
+                ).write(stpd_file)
+
+    def test_chosen_cases(self):
+        temp_stpd = tempfile.mkstemp()[1]
+        with open(temp_stpd, 'w') as stpd_file:
+            Stepper(
+                rps_schedule=["const(1, 10)"],
+                loop_limit=-1,
+                ammo_limit=10,
+                uris=["/one", "/two"],
+                autocases=1,
+                headers=["[Connection: close]"],
+                chosen_cases="_one",
+            ).write(stpd_file)
+        res = open(temp_stpd, 'r').read()
+        self.assertNotEquals("", res)
+        self.assertEquals(res.count('_two'), 0)
+        self.assertEquals(res.count('_one'), 10)
+
+    def test_stpd_reader(self):
+        sr = StpdReader("data/dummy.ammo.stpd")
+        self.assertEquals(len(list(sr)), 10)
+
+    def test_bad_stpd_reader(self):
+        from Tank.stepper.module_exceptions import StpdFileError
+        sr = StpdReader("data/bad.ammo.stpd")
+        with self.assertRaises(StpdFileError):
+            list(sr)

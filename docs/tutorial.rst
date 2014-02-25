@@ -1,7 +1,7 @@
 Usage
 -----
 
-So, you've installed Yandex.Tank to a proper server, close to target,
+So, you've installed Yandex.Tank to a proper machine, it is close to target,
 access is permitted and server is tuned. How to make a test?
 
 First Steps
@@ -24,8 +24,7 @@ values, step - increment value, dur - step duration.
 - the time for linear load increase from a to b. 
 
 3. ``const (load,dur)`` makes constant load. ``load`` - rps amount, ``dur`` - load duration. You can set
-fractional load like this: ``const (a/b,dur)`` -- a/b rps, where a >= 0,
-b > 0. Note: ``const(0, 10)`` - 0 rps for 10 seconds, in fact 10s pause
+fractional load like this: ``line(1.1, 2.5, 10)`` -- from 1.1rps to 2.5 for 10 seconds. Note: ``const(0, 10)`` - 0 rps for 10 seconds, in fact 10s pause
 in a test.
 
 ``step`` and ``line`` could be used with increasing and decreasing
@@ -247,7 +246,7 @@ number to appropriate value. Now, our basic config looks like that:
 .. code-block:: bash
 
   [phantom]
-  address=203.0.113.1:80 ;Target's address and port .
+  address=203.0.113.1:443 ;Target's address and port .
   rps_schedule=const (10,10m) ;Load scheme
   ssl=1
 

@@ -5,8 +5,8 @@ Command line options
 ~~~~~~~~~~~~~~~~~~~~
 
 There are three executables in Yandex.Tank package: ``yandex-tank``,
-``yandex-tank-ab`` и ``yandex-tank-jmeter``. Last two of them just use
-different king of load gen utilities, ``ab`` (Apache Benchmark) and
+``yandex-tank-ab`` and ``yandex-tank-jmeter``. Last two of them just use
+different kind of load generation utilities, ``ab`` (Apache Benchmark) and
 ``jmeter`` (Apache JMeter), accordingly. Command line options are common
 for all three.
 
@@ -41,7 +41,7 @@ example:
     [autostop] 
     autostop=instances(80%,10)
 
-A common rule: options with
+A common rule: options with the
 same name override those set before them (in the same file or not).
 
 Default configuration files
@@ -95,7 +95,7 @@ Use indent to show that a line is a continuation of a previous one:
 
     [autostop]
     autostop=time(1,10)
-      http(404,1%,5s)   
+      http(404,1%,5s)
       net(xx,1,30)
 *Ask Yandex.Tank developers to add multiline capability for options
 where you need it!*
@@ -281,6 +281,8 @@ Options
 * **jmx** - testplan for execution
 * **args** - additional commandline arguments for JMeter
 * **jmeter_path** - path to JMeter, allows to use alternative JMeter installation. Default: jmeter
+* **buffered_seconds** - amount of seconds to which delay aggregator, to be sure that everything were read from jmeter's results file
+* **all other options in the section** - they will be passed as User Defined Variables to JMeter
 
 Artifacts
 '''''''''
@@ -522,6 +524,23 @@ Default logic is applied on next levels:
 2. Metrics group level: If config contain host address only, without metrics, i.e `<Host address="somehost.yandex.ru" />`, then default metrics in groups `CPU`, `Memory`, `Disk` are collected. If host has defined any metric, then only it is collected.
 3. Metric level: if metrics group is defined without attribute `measure`, then only default group metrics are collected.
    
+Startup and Shutdown elements
+****************
+There is special non-metric elements called Startup and Shutdown. Startup shell scripts will be started before metric collection. On the normal shutdown startup scripts will be stopped and shutdown scripts will run. There may be any number of Startup and Shutdown elements.
+
+Following example illustrates this feature:
+::
+
+    <Monitoring>
+        <Host address="[target]">
+            <Startup>cat /dev/urandom | hexdump | awk 'BEGIN {RS="0000"} {print length($0)}' > /tmp/urandom.txt</Startup>
+            <Custom measure="tail" label="random int tail">/tmp/urandom.txt</Custom>
+            <Custom measure="call" label="random int call">tail -n1 /tmp/urandom.txt</Custom>
+            <Shutdown>rm /tmp/urandom.txt</Shutdown>
+        </Host>
+    </Monitoring>
+
+
 
 Console on-line screen
 ^^^^^^^^^^^^^^^^^^^^^^
