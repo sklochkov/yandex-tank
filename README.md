@@ -1,11 +1,11 @@
 # Yandex Tank
 ## Description
-Yandex.Tank is an extendable open source load testing instrument for advanced linux users which is especially good as a part of automated load testing suit.
+Yandex.Tank is an extendable open source load testing tool for advanced linux users which is especially good as a part of automated load testing suit.
 
 ## Get help
 Documentation at [ReadTheDocs](http://yandextank.readthedocs.org/en/latest/)
 
-[Blog](http://clubs.ya.ru/yandex-tank/) - in russian, though you're welcome to ask in english if you want
+Your questions are now wellcomed at [Stackoverflow](https://stackoverflow.com/), just add "load testing" + "yandex" tags.
 
 ## See also
 Evgeniy Mamchits' [phantom](https://github.com/mamchits/phantom) - Phantom scalable IO Engine
