@@ -4,7 +4,7 @@
 %define _rpmdir		.
 
 Name:		yandex-tank
-Version:	1.4.9
+Version:	1.4.10
 Release:	1
 
 Summary:	Yandex.Tank (Load Testing Tool)
@@ -98,6 +98,8 @@ install -m644 Tank/Plugins/phantom/phantom_benchmark_additional.tpl %{buildroot}
 install -m644 Tank/Plugins/phantom/phantom_benchmark_main.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/phantom/phantom_benchmark_main.tpl
 install -m644 Tank/Plugins/phantom/phantom.conf.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/phantom/phantom.conf.tpl
 install -m644 Tank/Plugins/ApacheBenchmark.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/ApacheBenchmark.py
+install -m644 Tank/Plugins/graphite-js.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/graphite-js.tpl
+install -m644 Tank/Plugins/graphite.coffee %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/graphite.coffee
 install -m644 Tank/ConsoleWorker.py %{buildroot}/usr/lib/yandex-tank/Tank/ConsoleWorker.py
 install -m644 Tank/MonCollector/collector.py %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector/collector.py
 install -m644 Tank/MonCollector/agent/agent.py %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector/agent/agent.py
