@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.10
-Release:	1
+Release:	3
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -19,6 +19,7 @@ Requires:	python-psutil
 Requires:	python-progressbar
 Requires:	python-ipaddr
 Requires:	phantom
+Requires:   python-matplotlib
 
 %description
 Yandex.Tank (Load Testing Tool)

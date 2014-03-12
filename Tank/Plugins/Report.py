@@ -54,6 +54,7 @@ class ReportPlugin(AbstractPlugin, AggregateResultListener):
             50.0: "#DD3800",
             75.0: "#DD6E00",
             80.0: "#DDAA00",
+            85.0: "#DDC800",
             90.0: "#DDDC00",
             95.0: "#A6DD00",
             98.0: "#70DD00",
