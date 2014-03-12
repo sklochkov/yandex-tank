@@ -5,7 +5,7 @@
 
 Name:		yandex-tank
 Version:	1.4.10
-Release:	3
+Release:	5
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
@@ -48,6 +48,7 @@ install -d -m755 %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/phantom
 install -d -m755 %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector
 install -d -m755 %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector/agent
 install -d -m755 %{buildroot}/usr/lib/yandex-tank/Tank/stepper
+install -d -m755 %{buildroot}/usr/lib/yandex-tank/Tank/logos
 
 install -d -m 755 %{buildroot}/etc/yandex-tank
 
@@ -101,6 +102,8 @@ install -m644 Tank/Plugins/phantom/phantom.conf.tpl %{buildroot}/usr/lib/yandex-
 install -m644 Tank/Plugins/ApacheBenchmark.py %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/ApacheBenchmark.py
 install -m644 Tank/Plugins/graphite-js.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/graphite-js.tpl
 install -m644 Tank/Plugins/graphite.coffee %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/graphite.coffee
+install -m644 Tank/Plugins/charts.coffee %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/charts.coffee
+install -m644 Tank/Plugins/report.tpl %{buildroot}/usr/lib/yandex-tank/Tank/Plugins/report.tpl
 install -m644 Tank/ConsoleWorker.py %{buildroot}/usr/lib/yandex-tank/Tank/ConsoleWorker.py
 install -m644 Tank/MonCollector/collector.py %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector/collector.py
 install -m644 Tank/MonCollector/agent/agent.py %{buildroot}/usr/lib/yandex-tank/Tank/MonCollector/agent/agent.py
@@ -119,7 +122,7 @@ install -m644 Tank/stepper/info.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper
 install -m644 Tank/stepper/main.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/main.py
 install -m644 Tank/stepper/__init__.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/__init__.py
 install -m644 Tank/stepper/module_exceptions.py %{buildroot}/usr/lib/yandex-tank/Tank/stepper/module_exceptions.py
-
+install -m644 logos/screen.png  %{buildroot}/usr/lib/yandex-tank/Tank/logos/screen.png
 
 
 %clean

@@ -1,14 +1,17 @@
 '''Report plugin that plots some graphs'''
 
 from Tank.Plugins.Aggregator import AggregateResultListener, AggregatorPlugin
+from Tank.Plugins.Monitoring import MonitoringPlugin
+from Tank.MonCollector.collector import MonitoringDataListener, MonitoringDataDecoder
 from tankcore import AbstractPlugin
 import datetime
 import time
-import numpy as np
-import matplotlib.pyplot as plt
+import string
+import json
+import os
 from collections import defaultdict
 
-class ReportPlugin(AbstractPlugin, AggregateResultListener):
+class ReportPlugin(AbstractPlugin, AggregateResultListener, MonitoringDataListener):
     '''Graphite data uploader'''
     
     SECTION = 'report'
@@ -19,9 +22,52 @@ class ReportPlugin(AbstractPlugin, AggregateResultListener):
     
     def __init__(self, core):
         AbstractPlugin.__init__(self, core)
-        self.overall_quantiles = defaultdict(list)
-        self.overall_rps = []
+        self.decoder = MonitoringDataDecoder()
+        self.mon_data = {}
+        def create_storage():
+            return {
+                'avg': defaultdict(list),
+                'quantiles': defaultdict(list),
+                'threads': {
+                    'active_threads': []
+                },
+                'rps': {
+                    'RPS': []
+                },
+                'http_codes': defaultdict(list),
+                'net_codes': defaultdict(list),
+            }
+        self.overall = create_storage()
+        self.cases = defaultdict(create_storage)
 
+    def monitoring_data(self, data_string):
+        self.log.debug("Mon report data: %s", data_string)
+        for line in data_string.splitlines():
+            if not line.strip():
+                continue
+            
+            def append_data(host, ts, data):
+                if host not in self.mon_data:
+                    self.mon_data[host] = {}
+                host_data = self.mon_data[host]
+                for key, value in data.iteritems():
+                    try:
+                        value = float(value)
+                        if '_' in key:
+                            group, key = key.split('_', 1)
+                        else:
+                            group = key
+                        if group not in host_data:
+                            host_data[group] = {}
+                        group_data = host_data[group]
+                        if key not in group_data:
+                            group_data[key] = []
+                        group_data[key].append((int(ts), value))
+                    except ValueError:
+                        pass
+            host, data, _, ts = self.decoder.decode_line(line)
+            append_data(host, ts, data)
+            
     def get_available_options(self):
         return []
 
@@ -36,53 +82,70 @@ class ReportPlugin(AbstractPlugin, AggregateResultListener):
     def configure(self):
         '''Read configuration'''
         self.show_graph = self.get_option("show_graph", "")
+        default_template = "/report.tpl"
+        self.template = self.get_option("template", os.path.dirname(__file__) + default_template)
         aggregator = self.core.get_plugin_of_type(AggregatorPlugin)
         aggregator.add_result_listener(self)
+        try:
+            self.mon = self.core.get_plugin_of_type(MonitoringPlugin)
+            if self.mon.monitoring:
+                self.mon.monitoring.add_listener(self)
+        except KeyError:
+            self.log.warning("No monitoring module, monitroing report disabled")
             
     def aggregate_second(self, data):
         """
         @data: SecondAggregateData
         """
-        ts = int(time.time())
-        self.overall_rps.append((ts, data.overall.RPS))
-        for key in data.overall.quantiles.keys():
-            self.overall_quantiles[key].append((ts, data.overall.quantiles[key]))
+        ts = int(time.mktime(data.time.timetuple()))
+        def add_aggreagted_second(data_item, storage):
+            data_dict = data_item.__dict__
+            avg = storage['avg']
+            for key in ["avg_connect_time", "avg_send_time", "avg_latency", "avg_receive_time"]:
+                avg[key].append((ts, data_dict.get(key, None)))
+            quantiles = storage['quantiles']
+            for key, value in data_item.quantiles.iteritems():
+                quantiles[key].append((ts, value))
+            storage['threads']['active_threads'].append((ts, data_item.active_threads))
+            storage['rps']['RPS'].append((ts, data_item.RPS))
+            http_codes = storage['http_codes']
+            for key, value in data_item.http_codes.iteritems():
+                http_codes[key].append((ts, value))
+            net_codes = storage['net_codes']
+            for key, value in data_item.net_codes.iteritems():
+                net_codes[key].append((ts, value))
+
+        add_aggreagted_second(data.overall, self.overall)
+        for case, case_data in data.cases.iteritems():
+            add_aggreagted_second(case_data, self.cases[case])
 
     def post_process(self, retcode):
-        colors = {
-            25.0: "#DD0000",
-            50.0: "#DD3800",
-            75.0: "#DD6E00",
-            80.0: "#DDAA00",
-            85.0: "#DDC800",
-            90.0: "#DDDC00",
-            95.0: "#A6DD00",
-            98.0: "#70DD00",
-            99.0: "#38DD00",
-            100.0: "#18BB00",
+#<<<<<<< HEAD
+#        colors = {
+#            25.0: "#DD0000",
+#            50.0: "#DD3800",
+#            75.0: "#DD6E00",
+#            80.0: "#DDAA00",
+#            85.0: "#DDC800",
+#            90.0: "#DDDC00",
+#            95.0: "#A6DD00",
+#            98.0: "#70DD00",
+#            99.0: "#38DD00",
+#            100.0: "#18BB00",
+#=======
+        results = {
+            'overall': self.overall,
+            'cases': self.cases,
+            'monitoring': self.mon_data,
+#>>>>>>> upstream/master
         }
-        overall_rps = np.array(self.overall_rps)
-        fig = plt.figure()
-        oq_plot = fig.add_subplot(111)
-        oq_plot.grid(True)
-        oq_keys = sorted(self.overall_quantiles)
-        legend = ["RPS"] + map(lambda x: str(int(x)), oq_keys)
-        oq_plot.plot(overall_rps[:, 0], overall_rps[:, 1], '--')
-        for key in reversed(oq_keys):
-            quantile = np.array(self.overall_quantiles[key])
-            oq_plot.fill_between(quantile[:, 0], quantile[:, 1], color=colors[key])
-        # workaround: pyplot can not build a legend for fill_between
-        # so we just draw a bunch of lines here:
-        for key in oq_keys:
-            quantile = np.array(self.overall_quantiles[key])
-            oq_plot.plot(quantile[:, 0], quantile[:, 1], color=colors[key])
-        plt.xlabel("Time")
-        plt.ylabel("Quantiles, ms")
-        plt.title("RPS and overall quantiles")
-        oq_plot.legend(legend, loc='upper left')
-        graph_png = self.core.mkstemp(".png", "overall_")
-        self.core.add_artifact_file(graph_png)
-        plt.savefig(graph_png)
-        if self.show_graph:
-            plt.show()
-        plt.close()
+        template = open(self.template, 'r').read()
+        report_html = self.core.mkstemp(".html", "report_")
+        self.core.add_artifact_file(report_html)
+        with open(report_html, 'w') as report_html_file:
+            report_html_file.write(
+                string.Template(template).safe_substitute(
+                    metrics=json.dumps(results),
+                )
+            )
+
