@@ -4,8 +4,8 @@
 %define _rpmdir		.
 
 Name:		yandex-tank
-Version:	1.4.10
-Release:	5
+Version:	1.5.0
+Release:	1
 
 Summary:	Yandex.Tank (Load Testing Tool)
 License:	MIT
